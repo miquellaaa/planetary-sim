@@ -92,102 +92,102 @@ function mergeBodies(a, b) {
   return { id: `${a.id}_${b.id}_m`, name: `${a.name}–${b.name}`, mass, radius, color, position: pos, velocity: vel, fixed: false };
 }
 
-// Compute analytic orbit points (ellipses)
-function OrbitPath({ body, primary }) {
-  const ref = useRef();
-  const points = useMemo(() => {
-    if (!primary) return [];
-    const r = body.position.clone().sub(primary.position).length();
-    const segments = 128;
+// Compute analytic elliptical orbit points based on current state
+function calculateOrbitPoints(body, primary) {
+  if (!primary || body.fixed) return [];
+  
+  // Calculate orbital elements from current state
+  const r = body.position.clone().sub(primary.position);
+  const v = body.velocity.clone();
+  
+  const mu = G * primary.mass;
+  const rMag = r.length();
+  const vMag = v.length();
+  
+  // Specific angular momentum
+  const h = r.clone().cross(v);
+  const hMag = h.length();
+  
+  // Eccentricity vector
+  const eVec = v.clone().cross(h).multiplyScalar(1/mu)
+    .sub(r.clone().multiplyScalar(1/rMag));
+  const e = eVec.length();
+  
+  // Semi-major axis
+  const a = 1 / (2/rMag - (vMag*vMag)/mu);
+  
+  // Semi-minor axis
+  const b = a * Math.sqrt(1 - e*e);
+  
+  // If orbit is hyperbolic or parabolic, show a reasonable approximation
+  if (a <= 0 || e >= 1) {
+    // For escape trajectories, show a partial arc
+    const segments = 64;
     const positions = [];
     for (let i = 0; i <= segments; i++) {
-      const theta = (i / segments) * 2 * Math.PI;
-      positions.push(new THREE.Vector3(Math.cos(theta) * r, 0, Math.sin(theta) * r));
+      const theta = (i / segments) * Math.PI; // Only half orbit for escape
+      const rCurrent = (a * (1 - e*e)) / (1 + e * Math.cos(theta));
+      positions.push(new THREE.Vector3(
+        Math.cos(theta) * rCurrent,
+        0,
+        Math.sin(theta) * rCurrent
+      ));
     }
     return positions;
-  }, [body, primary]);
-
-  return (
-    <line ref={ref}>
-      <bufferGeometry attach="geometry">
-        <bufferAttribute
-          attach="attributes-position"
-          array={new Float32Array(points.flatMap(p => [p.x, p.y, p.z]))}
-          count={points.length}
-          itemSize={3}
-        />
-      </bufferGeometry>
-      <lineBasicMaterial attach="material" color={body.color} opacity={0.4} transparent />
-    </line>
-  );
+  }
+  
+  // Regular elliptical orbit
+  const segments = 128;
+  const positions = [];
+  for (let i = 0; i <= segments; i++) {
+    const theta = (i / segments) * 2 * Math.PI;
+    const rCurrent = (a * (1 - e*e)) / (1 + e * Math.cos(theta));
+    positions.push(new THREE.Vector3(
+      Math.cos(theta) * rCurrent,
+      0,
+      Math.sin(theta) * rCurrent
+    ));
+  }
+  
+  return positions;
 }
 
-// Trail component for planets - shows actual path history
-function PlanetTrail({ body, trailLength = 100, enabled = true }) {
-  const trailRef = useRef();
-  const trailPoints = useRef([body.position.clone()]);
-  const frameCount = useRef(0);
-  
-  // Create geometry and material
+// Dynamic orbit path that updates in real-time
+function DynamicOrbitPath({ body, primary }) {
+  const ref = useRef();
   const [geometry] = useState(() => new THREE.BufferGeometry());
+  
   const material = useMemo(() => new THREE.LineBasicMaterial({ 
     color: body.color, 
-    transparent: true,
-    opacity: 0.7
+    opacity: 0.4, 
+    transparent: true 
   }), [body.color]);
 
   useFrame(() => {
-    if (!trailRef.current || !enabled) return;
+    if (!ref.current || !primary) return;
     
-    frameCount.current++;
+    const points = calculateOrbitPoints(body, primary);
     
-    // Add new position to trail (less frequently for performance)
-    if (frameCount.current % 2 === 0) {
-      const currentPos = body.position.clone();
-      
-      // Only add point if it's significantly different from the last one
-      if (trailPoints.current.length === 0 || 
-          currentPos.distanceTo(trailPoints.current[0]) > 0.1) {
-        trailPoints.current.unshift(currentPos);
-      }
-      
-      // Limit trail length
-      while (trailPoints.current.length > trailLength) {
-        trailPoints.current.pop();
-      }
-      
-      // Update geometry if we have enough points
-      if (trailPoints.current.length >= 2) {
-        const positions = new Float32Array(trailPoints.current.length * 3);
-        trailPoints.current.forEach((point, i) => {
-          positions[i * 3] = point.x;
-          positions[i * 3 + 1] = point.y;
-          positions[i * 3 + 2] = point.z;
-        });
-        
-        // Clear existing geometry and set new positions
-        geometry.dispose();
-        geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-        geometry.attributes.position.needsUpdate = true;
-      }
+    if (points.length > 1) {
+      const positions = new Float32Array(points.flatMap(p => [p.x, p.y, p.z]));
+      geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+      geometry.attributes.position.needsUpdate = true;
     }
   });
 
-  // Reset trail when body changes
+  // Initial setup
   useEffect(() => {
-    trailPoints.current = [body.position.clone()];
-    frameCount.current = 0;
-  }, [body.id]);
+    const points = calculateOrbitPoints(body, primary);
+    if (points.length > 1) {
+      const positions = new Float32Array(points.flatMap(p => [p.x, p.y, p.z]));
+      geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    }
+  }, [body.id, primary?.id, geometry]);
 
-  if (!enabled || trailPoints.current.length < 2) {
-    return null;
-  }
+  if (!primary || body.fixed) return null;
 
   return (
-    <primitive 
-      ref={trailRef} 
-      object={new THREE.Line(geometry, material)} 
-    />
+    <line ref={ref} geometry={geometry} material={material} />
   );
 }
 
@@ -223,8 +223,6 @@ export default function PlanetarySimulation() {
   const [selectedId, setSelectedId] = useState(null);
   const [timeScale, setTimeScale] = useState(1.0);
   const [log, setLog] = useState([]);
-  const [showTrails, setShowTrails] = useState(true);
-  const [trailLength, setTrailLength] = useState(80);
   const [showOrbits, setShowOrbits] = useState(true);
 
   const primary = useMemo(() => bodies.reduce((acc, b) => (b.mass > (acc?.mass || 0) ? b : acc), null), [bodies]);
@@ -334,22 +332,16 @@ export default function PlanetarySimulation() {
           <ambientLight intensity={0.4} />
           <pointLight position={[0, 0, 0]} intensity={2} />
 
-          {showOrbits && bodies.map((b) => b !== primary && <OrbitPath key={b.id} body={b} primary={primary} />)}
+          {showOrbits && bodies.map((b) => !b.fixed && (
+            <DynamicOrbitPath key={b.id} body={b} primary={primary} />
+          ))}
           {bodies.map((b) => (
-            <React.Fragment key={b.id}>
-              <PlanetMesh 
-                body={b} 
-                onClick={(body) => setSelectedId(body.id)} 
-                showLabel={true} 
-              />
-              {!b.fixed && (
-                <SimplePlanetTrail 
-                  body={b} 
-                  trailLength={trailLength} 
-                  enabled={showTrails}
-                />
-              )}
-            </React.Fragment>
+            <PlanetMesh 
+              key={b.id}
+              body={b} 
+              onClick={(body) => setSelectedId(body.id)} 
+              showLabel={true} 
+            />
           ))}
 
           <OrbitControls enablePan enableZoom />
@@ -359,7 +351,9 @@ export default function PlanetarySimulation() {
 
       <div className="w-1/4 h-full bg-gray-900 text-white p-4 overflow-auto">
         <h2 className="text-xl font-semibold mb-2">3D Planetary Simulator</h2>
-        <div className="mb-2 text-sm text-gray-300">Click a planet in the 3D view to edit its properties in real-time.</div>
+        <div className="mb-2 text-sm text-gray-300">
+          Click a planet to edit its properties. Orbit paths update in real-time.
+        </div>
 
         <div className="mb-3 flex flex-wrap gap-2">
           <button className="bg-blue-600 hover:bg-blue-500 px-3 py-1 rounded" onClick={() => setRunning((r) => !r)}>
@@ -386,7 +380,7 @@ export default function PlanetarySimulation() {
           />
         </div>
 
-        <div className="mb-3 space-y-2">
+        <div className="mb-3">
           <div className="flex items-center justify-between">
             <label className="text-sm">Show Orbit Paths</label>
             <input
@@ -396,34 +390,7 @@ export default function PlanetarySimulation() {
               className="w-4 h-4"
             />
           </div>
-          <div className="flex items-center justify-between">
-            <label className="text-sm">Show Motion Trails</label>
-            <input
-              type="checkbox"
-              checked={showTrails}
-              onChange={(e) => setShowTrails(e.target.checked)}
-              className="w-4 h-4"
-            />
-          </div>
         </div>
-
-        {showTrails && (
-          <div className="mb-3">
-            <label className="block text-xs text-gray-400">Trail Length: {trailLength}</label>
-            <input 
-              type="range" 
-              min="10" 
-              max="200" 
-              step="5" 
-              value={trailLength} 
-              onChange={(e) => setTrailLength(parseInt(e.target.value))} 
-              className="w-full" 
-            />
-            <div className="text-xs text-gray-400 mt-1">
-              Longer trails show more history but may affect performance
-            </div>
-          </div>
-        )}
 
         {/* Selected Planet Properties */}
         {selected && (
