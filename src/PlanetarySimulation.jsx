@@ -116,7 +116,7 @@ function OrbitPath({ body, primary }) {
 }
 
 // Trail component for planets
-function PlanetTrail({ body, trailLength = 100 }) {
+function PlanetTrail({ body, trailLength = 500 }) {
   const trailRef = useRef();
   const trailPoints = useRef([]);
   const trailGeometry = useRef(new THREE.BufferGeometry());
