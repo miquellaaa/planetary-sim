@@ -29,7 +29,7 @@ const defaultBodies = () => [
     id: "mercury",
     name: "Mercury",
     mass: 0.055,
-    radius: 0.25,
+    radius: 0.6,
     color: "#c0b090",
     position: v3(6, 0, 0),
     velocity: v3(0, 4.7, 0),
@@ -38,7 +38,7 @@ const defaultBodies = () => [
     id: "venus",
     name: "Venus",
     mass: 0.815,
-    radius: 0.45,
+    radius: 0.9,
     color: "#d9c59a",
     position: v3(11, 0, 0),
     velocity: v3(0, 3.5, 0),
@@ -47,7 +47,7 @@ const defaultBodies = () => [
     id: "earth",
     name: "Earth",
     mass: 1,
-    radius: 0.5,
+    radius: 1,
     color: "#4da6ff",
     position: v3(15, 0, 0),
     velocity: v3(0, 3.0, 0),
@@ -56,7 +56,7 @@ const defaultBodies = () => [
     id: "mars",
     name: "Mars",
     mass: 0.107,
-    radius: 0.4,
+    radius: 0.8,
     color: "#ff8a66",
     position: v3(22, 0, 0),
     velocity: v3(0, 2.4, 0),
@@ -267,7 +267,6 @@ export default function PlanetarySimulation() {
     [bodies]
   );
 
-  // PHYSICS RUNNER
   function PhysicsRunner() {
     const last = useRef(performance.now());
 
@@ -277,9 +276,7 @@ export default function PlanetarySimulation() {
       last.current = now;
 
       if (!running) return;
-
-      dt = Math.min(dt, 0.05);
-      dt *= timeScale;
+      dt = Math.min(dt, 0.05) * timeScale;
 
       const copy = bodiesRef.current.map((b) => ({
         ...b,
@@ -324,7 +321,7 @@ export default function PlanetarySimulation() {
         id,
         name: `Planet ${p.length}`,
         mass: 1,
-        radius: 0.4,
+        radius: 0.5,
         color: "#" + Math.floor(Math.random() * 0xffffff).toString(16),
         position: v3(10 + Math.random() * 20, 0, 0),
         velocity: v3(0, 2.5 + Math.random(), 0),
@@ -338,23 +335,18 @@ export default function PlanetarySimulation() {
     setSelectedId(null);
   }
 
-  // ---------------------------------------------------
-  // UI + 3D CANVAS
-  // ---------------------------------------------------
   return (
     <div className="w-full h-screen flex">
       <div className="w-3/4 h-full bg-black">
-        <Canvas camera={{ position: [0, 40, 60], fov: 60 }}>
-          <ambientLight intensity={0.4} />
+        <Canvas camera={{ position: [0, 25, 35], fov: 60 }}>
+          <ambientLight intensity={0.8} />
+          <directionalLight position={[10, 20, 10]} intensity={1.5} />
           <pointLight position={[0, 0, 0]} intensity={2} />
 
           {bodies.map((b) => (
             <React.Fragment key={b.id}>
-              {/* analytic ellipse */}
               {!b.fixed && <AnalyticEllipse body={b} primary={primary} />}
-              {/* realtime orbit trail */}
               {!b.fixed && <OrbitTrail body={b} />}
-              {/* planet mesh */}
               <PlanetMesh body={b} onClick={(bb) => setSelectedId(bb.id)} />
             </React.Fragment>
           ))}
@@ -367,55 +359,25 @@ export default function PlanetarySimulation() {
       {/* UI PANEL */}
       <div className="w-1/4 h-full bg-gray-900 text-white p-4 overflow-auto">
         <h2 className="text-xl font-semibold mb-2">3D Planetary Simulator</h2>
-
-        <button
-          className="bg-blue-600 px-3 py-1 mr-2 rounded"
-          onClick={() => setRunning((r) => !r)}
-        >
+        <button className="bg-blue-600 px-3 py-1 mr-2 rounded" onClick={() => setRunning((r) => !r)}>
           {running ? "Pause" : "Run"}
         </button>
-        <button
-          className="bg-green-600 px-3 py-1 mr-2 rounded"
-          onClick={addPlanet}
-        >
-          Add Planet
-        </button>
-        <button
-          className="bg-red-600 px-3 py-1 rounded"
-          onClick={reset}
-        >
-          Reset
-        </button>
+        <button className="bg-green-600 px-3 py-1 mr-2 rounded" onClick={addPlanet}>Add Planet</button>
+        <button className="bg-red-600 px-3 py-1 rounded" onClick={reset}>Reset</button>
 
         <div className="mt-4">
           <label>Time Scale: {timeScale.toFixed(2)}</label>
-          <input
-            type="range"
-            min="0.01"
-            max="10"
-            step="0.01"
-            value={timeScale}
-            onChange={(e) => setTimeScale(parseFloat(e.target.value))}
-            className="w-full"
-          />
+          <input type="range" min="0.01" max="10" step="0.01" value={timeScale} onChange={(e) => setTimeScale(parseFloat(e.target.value))} className="w-full" />
         </div>
 
         <div className="mt-6">
           <h3 className="font-semibold">Bodies</h3>
           {bodies.map((b) => (
-            <div
-              key={b.id}
-              className={`p-2 border rounded mt-2 cursor-pointer ${
-                selectedId === b.id ? "border-yellow-400" : "border-gray-700"
-              }`}
-              onClick={() => setSelectedId(b.id)}
-            >
+            <div key={b.id} className={`p-2 border rounded mt-2 cursor-pointer ${selectedId === b.id ? "border-yellow-400" : "border-gray-700"}`} onClick={() => setSelectedId(b.id)}>
               <div className="flex justify-between">
                 <div>
                   {b.name}
-                  <div className="text-xs text-gray-400">
-                    mass {b.mass.toFixed(3)} • r {b.radius.toFixed(2)}
-                  </div>
+                  <div className="text-xs text-gray-400">mass {b.mass.toFixed(3)} • r {b.radius.toFixed(2)}</div>
                 </div>
                 <div style={{ width: 14, height: 14, background: b.color }} />
               </div>
@@ -425,61 +387,26 @@ export default function PlanetarySimulation() {
 
         <div className="mt-6">
           <h3 className="font-semibold">Selected</h3>
-
           {!selected ? (
-            <div className="text-sm text-gray-400 mt-2">
-              Click a planet to select it.
-            </div>
+            <div className="text-sm text-gray-400 mt-2">Click a planet to select it.</div>
           ) : (
             <div className="mt-2">
               <div>{selected.name}</div>
               <div className="text-xs text-gray-500">ID: {selected.id}</div>
-
               <div className="mt-2">
                 Mass: {selected.mass.toFixed(2)}
-                <input
-                  type="range"
-                  min="0.05"
-                  max="50000"
-                  step="0.05"
-                  value={selected.mass}
-                  onChange={(e) =>
-                    updateSelected({ mass: parseFloat(e.target.value) })
-                  }
-                  className="w-full"
-                />
+                <input type="range" min="0.05" max="50000" step="0.05" value={selected.mass} onChange={(e) => updateSelected({ mass: parseFloat(e.target.value) })} className="w-full" />
               </div>
-
               <div className="mt-2">
                 Radius: {selected.radius.toFixed(2)}
-                <input
-                  type="range"
-                  min="0.1"
-                  max="6"
-                  step="0.01"
-                  value={selected.radius}
-                  onChange={(e) =>
-                    updateSelected({ radius: parseFloat(e.target.value) })
-                  }
-                  className="w-full"
-                />
+                <input type="range" min="0.1" max="6" step="0.01" value={selected.radius} onChange={(e) => updateSelected({ radius: parseFloat(e.target.value) })} className="w-full" />
               </div>
-
               <div className="mt-2">
                 Speed:
-                <input
-                  type="range"
-                  min="0.1"
-                  max="5"
-                  step="0.01"
-                  onChange={(e) => {
-                    const f = parseFloat(e.target.value);
-                    updateSelected({
-                      velocity: selected.velocity.clone().multiplyScalar(f),
-                    });
-                  }}
-                  className="w-full"
-                />
+                <input type="range" min="0.1" max="5" step="0.01" onChange={(e) => {
+                  const f = parseFloat(e.target.value);
+                  updateSelected({ velocity: selected.velocity.clone().multiplyScalar(f) });
+                }} className="w-full" />
               </div>
             </div>
           )}
@@ -488,11 +415,7 @@ export default function PlanetarySimulation() {
         <div className="mt-6">
           <h3 className="font-semibold">Event Log</h3>
           <div className="text-xs mt-2 max-h-40 overflow-auto">
-            {log.length === 0 ? (
-              <div className="text-gray-500">No events yet</div>
-            ) : (
-              log.map((l, i) => <div key={i}>{l}</div>)
-            )}
+            {log.length === 0 ? <div className="text-gray-500">No events yet</div> : log.map((l, i) => <div key={i}>{l}</div>)}
           </div>
         </div>
       </div>
