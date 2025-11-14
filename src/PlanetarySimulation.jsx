@@ -115,6 +115,44 @@ function OrbitPath({ body, primary }) {
   );
 }
 
+// Trail component for planets
+function PlanetTrail({ body, trailLength = 100 }) {
+  const trailRef = useRef();
+  const trailPoints = useRef([]);
+  const trailGeometry = useRef(new THREE.BufferGeometry());
+
+  useFrame(() => {
+    if (!trailRef.current) return;
+    
+    // Add current position to trail
+    trailPoints.current.push(body.position.clone());
+    
+    // Limit trail length
+    if (trailPoints.current.length > trailLength) {
+      trailPoints.current.shift();
+    }
+    
+    // Update trail geometry
+    if (trailPoints.current.length > 1) {
+      trailGeometry.current.setFromPoints(trailPoints.current);
+    }
+  });
+
+  if (trailPoints.current.length < 2) return null;
+
+  return (
+    <line ref={trailRef} geometry={trailGeometry.current}>
+      <lineBasicMaterial 
+        attach="material" 
+        color={body.color} 
+        linewidth={2} 
+        opacity={0.6} 
+        transparent 
+      />
+    </line>
+  );
+}
+
 // Planet mesh component
 function PlanetMesh({ body, onClick, showLabel }) {
   const ref = useRef();
@@ -144,6 +182,7 @@ export default function PlanetarySimulation() {
   const [selectedId, setSelectedId] = useState(null);
   const [timeScale, setTimeScale] = useState(1.0);
   const [log, setLog] = useState([]);
+  const [showTrails, setShowTrails] = useState(true);
 
   const primary = useMemo(() => bodies.reduce((acc, b) => (b.mass > (acc?.mass || 0) ? b : acc), null), [bodies]);
 
@@ -157,7 +196,11 @@ export default function PlanetarySimulation() {
       dt = Math.min(dt, 0.05);
       const step = dt * timeScale;
 
-      const copy = bodiesRef.current.map((b) => ({ ...b, position: b.position.clone(), velocity: b.velocity.clone() }));
+      const copy = bodiesRef.current.map((b) => ({ 
+        ...b, 
+        position: b.position.clone(), 
+        velocity: b.velocity.clone() 
+      }));
       stepPhysics(copy, step);
 
       // collisions
@@ -185,7 +228,14 @@ export default function PlanetarySimulation() {
   }
 
   const selected = bodies.find((b) => b.id === selectedId) || null;
-  const updateSelected = (changes) => setBodies((prev) => prev.map((b) => (b.id === selectedId ? { ...b, ...changes } : b)));
+  
+  const updateSelected = (changes) => {
+    setBodies((prev) => 
+      prev.map((b) => 
+        b.id === selectedId ? { ...b, ...changes } : b
+      )
+    );
+  };
 
   function addPlanet() {
     const id = `p_${Math.random().toString(36).slice(2, 8)}`;
@@ -194,7 +244,16 @@ export default function PlanetarySimulation() {
     const speed = Math.sqrt((G * primary.mass) / r);
     const pos = v3(Math.cos(angle) * r, 0, Math.sin(angle) * r);
     const vel = v3(-Math.sin(angle) * speed, 0, Math.cos(angle) * speed);
-    const p = { id, name: `Planet ${bodies.length}`, mass: 4, radius: 0.5, color: `#${Math.floor(Math.random() * 0xffffff).toString(16).padStart(6, "0")}`, position: pos, velocity: vel, fixed: false };
+    const p = { 
+      id, 
+      name: `Planet ${bodies.length}`, 
+      mass: 4, 
+      radius: 0.5, 
+      color: `#${Math.floor(Math.random() * 0xffffff).toString(16).padStart(6, "0")}`, 
+      position: pos, 
+      velocity: vel, 
+      fixed: false 
+    };
     setBodies((b0) => [...b0, p]);
   }
 
@@ -203,6 +262,27 @@ export default function PlanetarySimulation() {
     setLog([]);
     setSelectedId(null);
   }
+
+  // Property editing functions
+  const updateMass = (mass) => {
+    if (selected && !selected.fixed) {
+      updateSelected({ mass: parseFloat(mass) });
+    }
+  };
+
+  const updateRadius = (radius) => {
+    if (selected && !selected.fixed) {
+      updateSelected({ radius: parseFloat(radius) });
+    }
+  };
+
+  const updateVelocity = (axis, value) => {
+    if (selected && !selected.fixed) {
+      const newVelocity = selected.velocity.clone();
+      newVelocity[axis] = parseFloat(value);
+      updateSelected({ velocity: newVelocity });
+    }
+  };
 
   return (
     <div className="w-full h-screen flex">
@@ -213,7 +293,14 @@ export default function PlanetarySimulation() {
 
           {bodies.map((b) => b !== primary && <OrbitPath key={b.id} body={b} primary={primary} />)}
           {bodies.map((b) => (
-            <PlanetMesh key={b.id} body={b} onClick={(body) => setSelectedId(body.id)} showLabel={true} />
+            <React.Fragment key={b.id}>
+              <PlanetMesh 
+                body={b} 
+                onClick={(body) => setSelectedId(body.id)} 
+                showLabel={true} 
+              />
+              {showTrails && !b.fixed && <PlanetTrail body={b} trailLength={200} />}
+            </React.Fragment>
           ))}
 
           <OrbitControls enablePan enableZoom />
@@ -225,37 +312,177 @@ export default function PlanetarySimulation() {
         <h2 className="text-xl font-semibold mb-2">3D Planetary Simulator</h2>
         <div className="mb-2 text-sm text-gray-300">Click a planet in the 3D view to edit its properties in real-time.</div>
 
-        <div className="mb-3">
-          <button className="bg-blue-600 hover:bg-blue-500 px-3 py-1 rounded mr-2" onClick={() => setRunning((r) => !r)}>
+        <div className="mb-3 flex flex-wrap gap-2">
+          <button className="bg-blue-600 hover:bg-blue-500 px-3 py-1 rounded" onClick={() => setRunning((r) => !r)}>
             {running ? "Pause" : "Run"}
           </button>
-          <button className="bg-green-600 hover:bg-green-500 px-3 py-1 rounded mr-2" onClick={addPlanet}>
+          <button className="bg-green-600 hover:bg-green-500 px-3 py-1 rounded" onClick={addPlanet}>
             Add Planet
           </button>
           <button className="bg-red-600 hover:bg-red-500 px-3 py-1 rounded" onClick={reset}>
             Reset
           </button>
+          <button 
+            className={`px-3 py-1 rounded ${showTrails ? 'bg-purple-600 hover:bg-purple-500' : 'bg-gray-600 hover:bg-gray-500'}`}
+            onClick={() => setShowTrails(!showTrails)}
+          >
+            {showTrails ? 'Hide Trails' : 'Show Trails'}
+          </button>
         </div>
 
         <div className="mb-3">
           <label className="block text-xs text-gray-400">Time scale: {timeScale.toFixed(2)}</label>
-          <input type="range" min="0.01" max="10" step="0.01" value={timeScale} onChange={(e) => setTimeScale(parseFloat(e.target.value))} className="w-full" />
+          <input 
+            type="range" 
+            min="0.01" 
+            max="10" 
+            step="0.01" 
+            value={timeScale} 
+            onChange={(e) => setTimeScale(parseFloat(e.target.value))} 
+            className="w-full" 
+          />
         </div>
+
+        {/* Selected Planet Properties */}
+        {selected && (
+          <div className="mb-4 p-3 bg-gray-800 rounded">
+            <h3 className="font-medium mb-2">Editing: {selected.name}</h3>
+            
+            {!selected.fixed && (
+              <>
+                {/* Mass Control */}
+                <div className="mb-2">
+                  <label className="block text-xs text-gray-400 mb-1">
+                    Mass: {selected.mass.toFixed(2)}
+                  </label>
+                  <input
+                    type="range"
+                    min="0.1"
+                    max="100"
+                    step="0.1"
+                    value={selected.mass}
+                    onChange={(e) => updateMass(e.target.value)}
+                    className="w-full"
+                  />
+                </div>
+
+                {/* Radius Control */}
+                <div className="mb-2">
+                  <label className="block text-xs text-gray-400 mb-1">
+                    Radius: {selected.radius.toFixed(2)}
+                  </label>
+                  <input
+                    type="range"
+                    min="0.1"
+                    max="3"
+                    step="0.1"
+                    value={selected.radius}
+                    onChange={(e) => updateRadius(e.target.value)}
+                    className="w-full"
+                  />
+                </div>
+
+                {/* Velocity Controls */}
+                <div className="mb-2">
+                  <label className="block text-xs text-gray-400 mb-1">Velocity</label>
+                  <div className="space-y-1">
+                    <div className="flex items-center">
+                      <span className="text-xs w-8">X:</span>
+                      <input
+                        type="range"
+                        min="-10"
+                        max="10"
+                        step="0.1"
+                        value={selected.velocity.x}
+                        onChange={(e) => updateVelocity('x', e.target.value)}
+                        className="flex-1"
+                      />
+                      <span className="text-xs w-12 ml-2">{selected.velocity.x.toFixed(1)}</span>
+                    </div>
+                    <div className="flex items-center">
+                      <span className="text-xs w-8">Y:</span>
+                      <input
+                        type="range"
+                        min="-10"
+                        max="10"
+                        step="0.1"
+                        value={selected.velocity.y}
+                        onChange={(e) => updateVelocity('y', e.target.value)}
+                        className="flex-1"
+                      />
+                      <span className="text-xs w-12 ml-2">{selected.velocity.y.toFixed(1)}</span>
+                    </div>
+                    <div className="flex items-center">
+                      <span className="text-xs w-8">Z:</span>
+                      <input
+                        type="range"
+                        min="-10"
+                        max="10"
+                        step="0.1"
+                        value={selected.velocity.z}
+                        onChange={(e) => updateVelocity('z', e.target.value)}
+                        className="flex-1"
+                      />
+                      <span className="text-xs w-12 ml-2">{selected.velocity.z.toFixed(1)}</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="text-xs text-gray-400 mt-2">
+                  Speed: {selected.velocity.length().toFixed(2)}
+                </div>
+              </>
+            )}
+            
+            {selected.fixed && (
+              <div className="text-sm text-yellow-400">
+                This body is fixed and cannot be edited.
+              </div>
+            )}
+          </div>
+        )}
 
         <div className="mb-3">
           <h3 className="font-medium">Bodies</h3>
           <div className="text-sm text-gray-300">
             {bodies.map((b) => (
-              <div key={b.id} className={`p-2 border rounded mt-2 cursor-pointer flex items-center justify-between ${selectedId === b.id ? "border-yellow-400" : "border-gray-700"}`} onClick={() => setSelectedId(b.id)}>
+              <div 
+                key={b.id} 
+                className={`p-2 border rounded mt-2 cursor-pointer flex items-center justify-between ${
+                  selectedId === b.id ? "border-yellow-400" : "border-gray-700"
+                }`} 
+                onClick={() => setSelectedId(b.id)}
+              >
                 <div>
                   <div className="text-sm">{b.name}</div>
-                  <div className="text-xs text-gray-400">mass: {b.mass.toFixed(2)} • r: {b.radius.toFixed(2)}</div>
+                  <div className="text-xs text-gray-400">
+                    mass: {b.mass.toFixed(2)} • r: {b.radius.toFixed(2)}
+                  </div>
+                  {!b.fixed && (
+                    <div className="text-xs text-gray-500">
+                      speed: {b.velocity.length().toFixed(2)}
+                    </div>
+                  )}
                 </div>
                 <div style={{ width: 14, height: 14, background: b.color, borderRadius: 4 }} />
               </div>
             ))}
           </div>
         </div>
+
+        {/* Event Log */}
+        {log.length > 0 && (
+          <div className="mt-4">
+            <h3 className="font-medium mb-2">Event Log</h3>
+            <div className="text-xs max-h-32 overflow-y-auto">
+              {log.map((entry, i) => (
+                <div key={i} className="p-1 border-b border-gray-700">
+                  {entry}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
