@@ -125,59 +125,119 @@ function OrbitPath({ body, primary }) {
 // Trail component for planets - shows actual path history
 function PlanetTrail({ body, trailLength = 100, enabled = true }) {
   const trailRef = useRef();
-  const trailPoints = useRef([]);
+  const trailPoints = useRef([body.position.clone()]);
   const frameCount = useRef(0);
   
-  const geometry = useMemo(() => new THREE.BufferGeometry(), []);
+  // Create geometry and material
+  const [geometry] = useState(() => new THREE.BufferGeometry());
   const material = useMemo(() => new THREE.LineBasicMaterial({ 
     color: body.color, 
     transparent: true,
-    opacity: 0.7,
-    linewidth: 1
+    opacity: 0.7
   }), [body.color]);
 
   useFrame(() => {
     if (!trailRef.current || !enabled) return;
     
-    // Add current position to trail every few frames
     frameCount.current++;
-    if (frameCount.current % 3 === 0) { // Update every 3 frames for performance
-      // Add current position to the beginning of the trail
-      trailPoints.current.unshift(body.position.clone());
+    
+    // Add new position to trail (less frequently for performance)
+    if (frameCount.current % 2 === 0) {
+      const currentPos = body.position.clone();
       
-      // Limit trail length
-      if (trailPoints.current.length > trailLength) {
-        trailPoints.current.pop(); // Remove oldest point
+      // Only add point if it's significantly different from the last one
+      if (trailPoints.current.length === 0 || 
+          currentPos.distanceTo(trailPoints.current[0]) > 0.1) {
+        trailPoints.current.unshift(currentPos);
       }
       
-      // Update trail geometry if we have enough points
+      // Limit trail length
+      while (trailPoints.current.length > trailLength) {
+        trailPoints.current.pop();
+      }
+      
+      // Update geometry if we have enough points
       if (trailPoints.current.length >= 2) {
         const positions = new Float32Array(trailPoints.current.length * 3);
-        trailPoints.current.forEach((point, index) => {
-          positions[index * 3] = point.x;
-          positions[index * 3 + 1] = point.y;
-          positions[index * 3 + 2] = point.z;
+        trailPoints.current.forEach((point, i) => {
+          positions[i * 3] = point.x;
+          positions[i * 3 + 1] = point.y;
+          positions[i * 3 + 2] = point.z;
         });
         
-        geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+        // Clear existing geometry and set new positions
+        geometry.dispose();
+        geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
         geometry.attributes.position.needsUpdate = true;
       }
     }
   });
 
-  // Reset trail when body changes or when enabled changes
+  // Reset trail when body changes
   useEffect(() => {
     trailPoints.current = [body.position.clone()];
     frameCount.current = 0;
-  }, [body.id, enabled]);
+  }, [body.id]);
 
   if (!enabled || trailPoints.current.length < 2) {
     return null;
   }
 
   return (
-    <line ref={trailRef} geometry={geometry} material={material} />
+    <primitive 
+      ref={trailRef} 
+      object={new THREE.Line(geometry, material)} 
+    />
   );
+}
+
+// Alternative simpler trail implementation
+function SimplePlanetTrail({ body, trailLength = 80, enabled = true }) {
+  const trailRef = useRef();
+  const points = useRef([body.position.clone()]);
+  
+  const geometry = useMemo(() => {
+    const geom = new THREE.BufferGeometry();
+    // Initialize with current position
+    const positions = new Float32Array([body.position.x, body.position.y, body.position.z]);
+    geom.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    return geom;
+  }, [body.id]);
+
+  const material = useMemo(() => new THREE.LineBasicMaterial({
+    color: body.color,
+    transparent: true,
+    opacity: 0.6
+  }), [body.color]);
+
+  useFrame(() => {
+    if (!trailRef.current || !enabled) return;
+
+    // Add current position
+    points.current.push(body.position.clone());
+    
+    // Remove old points
+    while (points.current.length > trailLength) {
+      points.current.shift();
+    }
+    
+    // Update geometry
+    if (points.current.length >= 2) {
+      const positions = new Float32Array(points.current.length * 3);
+      points.current.forEach((point, i) => {
+        positions[i * 3] = point.x;
+        positions[i * 3 + 1] = point.y;
+        positions[i * 3 + 2] = point.z;
+      });
+      
+      geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+      geometry.attributes.position.needsUpdate = true;
+    }
+  });
+
+  if (!enabled || points.current.length < 2) return null;
+
+  return <line ref={trailRef} geometry={geometry} material={material} />;
 }
 
 // Planet mesh component
@@ -332,7 +392,7 @@ export default function PlanetarySimulation() {
                 showLabel={true} 
               />
               {!b.fixed && (
-                <PlanetTrail 
+                <SimplePlanetTrail 
                   body={b} 
                   trailLength={trailLength} 
                   enabled={showTrails}
