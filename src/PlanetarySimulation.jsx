@@ -132,8 +132,8 @@ function PlanetTrail({ body, trailLength = 100, enabled = true }) {
   const [geometry] = useState(() => new THREE.BufferGeometry());
   const material = useMemo(() => new THREE.LineBasicMaterial({ 
     color: body.color, 
-    transparent: false,
-    opacity: 1.0
+    transparent: true,
+    opacity: 0.7
   }), [body.color]);
 
   useFrame(() => {
@@ -189,55 +189,6 @@ function PlanetTrail({ body, trailLength = 100, enabled = true }) {
       object={new THREE.Line(geometry, material)} 
     />
   );
-}
-
-// Alternative simpler trail implementation
-function SimplePlanetTrail({ body, trailLength = 80, enabled = true }) {
-  const trailRef = useRef();
-  const points = useRef([body.position.clone()]);
-  
-  const geometry = useMemo(() => {
-    const geom = new THREE.BufferGeometry();
-    // Initialize with current position
-    const positions = new Float32Array([body.position.x, body.position.y, body.position.z]);
-    geom.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-    return geom;
-  }, [body.id]);
-
-  const material = useMemo(() => new THREE.LineBasicMaterial({
-    color: body.color,
-    transparent: true,
-    opacity: 0.6
-  }), [body.color]);
-
-  useFrame(() => {
-    if (!trailRef.current || !enabled) return;
-
-    // Add current position
-    points.current.push(body.position.clone());
-    
-    // Remove old points
-    while (points.current.length > trailLength) {
-      points.current.shift();
-    }
-    
-    // Update geometry
-    if (points.current.length >= 2) {
-      const positions = new Float32Array(points.current.length * 3);
-      points.current.forEach((point, i) => {
-        positions[i * 3] = point.x;
-        positions[i * 3 + 1] = point.y;
-        positions[i * 3 + 2] = point.z;
-      });
-      
-      geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-      geometry.attributes.position.needsUpdate = true;
-    }
-  });
-
-  if (!enabled || points.current.length < 2) return null;
-
-  return <line ref={trailRef} geometry={geometry} material={material} />;
 }
 
 // Planet mesh component
