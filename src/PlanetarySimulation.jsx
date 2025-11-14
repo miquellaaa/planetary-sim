@@ -110,33 +110,43 @@ function OrbitPath({ body, primary }) {
   return (
     <line ref={ref}>
       <bufferGeometry attach="geometry" setFromPoints={points} />
-      <lineBasicMaterial attach="material" color={body.color} linewidth={1} opacity={0.4} transparent />
+      <lineBasicMaterial attach="material" color={body.color} opacity={0.4} transparent />
     </line>
   );
 }
 
 // Trail component for planets
-function PlanetTrail({ body, trailLength = 500 }) {
+function PlanetTrail({ body, trailLength = 100 }) {
   const trailRef = useRef();
   const trailPoints = useRef([]);
   const trailGeometry = useRef(new THREE.BufferGeometry());
+  const frameCount = useRef(0);
 
   useFrame(() => {
     if (!trailRef.current) return;
     
-    // Add current position to trail
-    trailPoints.current.push(body.position.clone());
-    
-    // Limit trail length
-    if (trailPoints.current.length > trailLength) {
-      trailPoints.current.shift();
-    }
-    
-    // Update trail geometry
-    if (trailPoints.current.length > 1) {
-      trailGeometry.current.setFromPoints(trailPoints.current);
+    // Add current position to trail every few frames to reduce performance impact
+    frameCount.current++;
+    if (frameCount.current % 2 === 0) { // Update trail every 2 frames
+      trailPoints.current.push(body.position.clone());
+      
+      // Limit trail length
+      if (trailPoints.current.length > trailLength) {
+        trailPoints.current.shift();
+      }
+      
+      // Update trail geometry
+      if (trailPoints.current.length > 1) {
+        trailGeometry.current.setFromPoints(trailPoints.current);
+      }
     }
   });
+
+  // Reset trail when body changes
+  useEffect(() => {
+    trailPoints.current = [body.position.clone()];
+    trailGeometry.current.setFromPoints(trailPoints.current);
+  }, [body.id]); // Reset when body ID changes (e.g., after merge)
 
   if (trailPoints.current.length < 2) return null;
 
@@ -145,9 +155,9 @@ function PlanetTrail({ body, trailLength = 500 }) {
       <lineBasicMaterial 
         attach="material" 
         color={body.color} 
-        linewidth={2} 
         opacity={0.6} 
         transparent 
+        linewidth={1}
       />
     </line>
   );
@@ -161,7 +171,10 @@ function PlanetMesh({ body, onClick, showLabel }) {
   });
 
   return (
-    <mesh ref={ref} onClick={(e) => onClick(body)}>
+    <mesh ref={ref} onClick={(e) => {
+      e.stopPropagation();
+      onClick(body);
+    }}>
       <sphereGeometry args={[body.radius, 32, 32]} />
       <meshStandardMaterial color={body.color} metalness={0.2} roughness={0.7} />
       {showLabel && (
@@ -183,6 +196,7 @@ export default function PlanetarySimulation() {
   const [timeScale, setTimeScale] = useState(1.0);
   const [log, setLog] = useState([]);
   const [showTrails, setShowTrails] = useState(true);
+  const [trailLength, setTrailLength] = useState(100);
 
   const primary = useMemo(() => bodies.reduce((acc, b) => (b.mass > (acc?.mass || 0) ? b : acc), null), [bodies]);
 
@@ -299,7 +313,7 @@ export default function PlanetarySimulation() {
                 onClick={(body) => setSelectedId(body.id)} 
                 showLabel={true} 
               />
-              {showTrails && !b.fixed && <PlanetTrail body={b} trailLength={200} />}
+              {showTrails && !b.fixed && <PlanetTrail body={b} trailLength={trailLength} />}
             </React.Fragment>
           ))}
 
@@ -342,6 +356,21 @@ export default function PlanetarySimulation() {
             className="w-full" 
           />
         </div>
+
+        {showTrails && (
+          <div className="mb-3">
+            <label className="block text-xs text-gray-400">Trail Length: {trailLength}</label>
+            <input 
+              type="range" 
+              min="10" 
+              max="300" 
+              step="10" 
+              value={trailLength} 
+              onChange={(e) => setTrailLength(parseInt(e.target.value))} 
+              className="w-full" 
+            />
+          </div>
+        )}
 
         {/* Selected Planet Properties */}
         {selected && (
@@ -486,4 +515,3 @@ export default function PlanetarySimulation() {
       </div>
     </div>
   );
-}
