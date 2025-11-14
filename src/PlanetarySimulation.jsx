@@ -122,44 +122,56 @@ function OrbitPath({ body, primary }) {
   );
 }
 
-// Trail component for planets
-function PlanetTrail({ body, trailLength = 100 }) {
+// Trail component for planets - shows actual path history
+function PlanetTrail({ body, trailLength = 100, enabled = true }) {
   const trailRef = useRef();
   const trailPoints = useRef([]);
+  const frameCount = useRef(0);
   
-  // Initialize geometry with empty points
-  const [geometry] = useState(() => new THREE.BufferGeometry());
+  const geometry = useMemo(() => new THREE.BufferGeometry(), []);
   const material = useMemo(() => new THREE.LineBasicMaterial({ 
     color: body.color, 
     transparent: true,
-    opacity: 0.7
+    opacity: 0.7,
+    linewidth: 1
   }), [body.color]);
 
   useFrame(() => {
-    if (!trailRef.current) return;
+    if (!trailRef.current || !enabled) return;
     
-    // Add current position to trail
-    trailPoints.current.push(body.position.clone());
-    
-    // Limit trail length
-    if (trailPoints.current.length > trailLength) {
-      trailPoints.current.shift();
-    }
-    
-    // Update trail geometry
-    if (trailPoints.current.length > 1) {
-      const positions = trailPoints.current.flatMap(point => [point.x, point.y, point.z]);
-      geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-      geometry.attributes.position.needsUpdate = true;
+    // Add current position to trail every few frames
+    frameCount.current++;
+    if (frameCount.current % 3 === 0) { // Update every 3 frames for performance
+      // Add current position to the beginning of the trail
+      trailPoints.current.unshift(body.position.clone());
+      
+      // Limit trail length
+      if (trailPoints.current.length > trailLength) {
+        trailPoints.current.pop(); // Remove oldest point
+      }
+      
+      // Update trail geometry if we have enough points
+      if (trailPoints.current.length >= 2) {
+        const positions = new Float32Array(trailPoints.current.length * 3);
+        trailPoints.current.forEach((point, index) => {
+          positions[index * 3] = point.x;
+          positions[index * 3 + 1] = point.y;
+          positions[index * 3 + 2] = point.z;
+        });
+        
+        geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+        geometry.attributes.position.needsUpdate = true;
+      }
     }
   });
 
-  // Reset trail when body changes
+  // Reset trail when body changes or when enabled changes
   useEffect(() => {
     trailPoints.current = [body.position.clone()];
-  }, [body.id]);
+    frameCount.current = 0;
+  }, [body.id, enabled]);
 
-  if (trailPoints.current.length < 2) {
+  if (!enabled || trailPoints.current.length < 2) {
     return null;
   }
 
@@ -201,7 +213,8 @@ export default function PlanetarySimulation() {
   const [timeScale, setTimeScale] = useState(1.0);
   const [log, setLog] = useState([]);
   const [showTrails, setShowTrails] = useState(true);
-  const [trailLength, setTrailLength] = useState(100);
+  const [trailLength, setTrailLength] = useState(80);
+  const [showOrbits, setShowOrbits] = useState(true);
 
   const primary = useMemo(() => bodies.reduce((acc, b) => (b.mass > (acc?.mass || 0) ? b : acc), null), [bodies]);
 
@@ -310,7 +323,7 @@ export default function PlanetarySimulation() {
           <ambientLight intensity={0.4} />
           <pointLight position={[0, 0, 0]} intensity={2} />
 
-          {bodies.map((b) => b !== primary && <OrbitPath key={b.id} body={b} primary={primary} />)}
+          {showOrbits && bodies.map((b) => b !== primary && <OrbitPath key={b.id} body={b} primary={primary} />)}
           {bodies.map((b) => (
             <React.Fragment key={b.id}>
               <PlanetMesh 
@@ -318,7 +331,13 @@ export default function PlanetarySimulation() {
                 onClick={(body) => setSelectedId(body.id)} 
                 showLabel={true} 
               />
-              {showTrails && !b.fixed && <PlanetTrail body={b} trailLength={trailLength} />}
+              {!b.fixed && (
+                <PlanetTrail 
+                  body={b} 
+                  trailLength={trailLength} 
+                  enabled={showTrails}
+                />
+              )}
             </React.Fragment>
           ))}
 
@@ -341,12 +360,6 @@ export default function PlanetarySimulation() {
           <button className="bg-red-600 hover:bg-red-500 px-3 py-1 rounded" onClick={reset}>
             Reset
           </button>
-          <button 
-            className={`px-3 py-1 rounded ${showTrails ? 'bg-purple-600 hover:bg-purple-500' : 'bg-gray-600 hover:bg-gray-500'}`}
-            onClick={() => setShowTrails(!showTrails)}
-          >
-            {showTrails ? 'Hide Trails' : 'Show Trails'}
-          </button>
         </div>
 
         <div className="mb-3">
@@ -362,18 +375,42 @@ export default function PlanetarySimulation() {
           />
         </div>
 
+        <div className="mb-3 space-y-2">
+          <div className="flex items-center justify-between">
+            <label className="text-sm">Show Orbit Paths</label>
+            <input
+              type="checkbox"
+              checked={showOrbits}
+              onChange={(e) => setShowOrbits(e.target.checked)}
+              className="w-4 h-4"
+            />
+          </div>
+          <div className="flex items-center justify-between">
+            <label className="text-sm">Show Motion Trails</label>
+            <input
+              type="checkbox"
+              checked={showTrails}
+              onChange={(e) => setShowTrails(e.target.checked)}
+              className="w-4 h-4"
+            />
+          </div>
+        </div>
+
         {showTrails && (
           <div className="mb-3">
             <label className="block text-xs text-gray-400">Trail Length: {trailLength}</label>
             <input 
               type="range" 
               min="10" 
-              max="300" 
-              step="10" 
+              max="200" 
+              step="5" 
               value={trailLength} 
               onChange={(e) => setTrailLength(parseInt(e.target.value))} 
               className="w-full" 
             />
+            <div className="text-xs text-gray-400 mt-1">
+              Longer trails show more history but may affect performance
+            </div>
           </div>
         )}
 
