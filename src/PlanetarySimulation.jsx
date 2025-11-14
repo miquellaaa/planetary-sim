@@ -109,7 +109,14 @@ function OrbitPath({ body, primary }) {
 
   return (
     <line ref={ref}>
-      <bufferGeometry attach="geometry" setFromPoints={points} />
+      <bufferGeometry attach="geometry">
+        <bufferAttribute
+          attach="attributes-position"
+          array={new Float32Array(points.flatMap(p => [p.x, p.y, p.z]))}
+          count={points.length}
+          itemSize={3}
+        />
+      </bufferGeometry>
       <lineBasicMaterial attach="material" color={body.color} opacity={0.4} transparent />
     </line>
   );
@@ -119,47 +126,45 @@ function OrbitPath({ body, primary }) {
 function PlanetTrail({ body, trailLength = 100 }) {
   const trailRef = useRef();
   const trailPoints = useRef([]);
-  const trailGeometry = useRef(new THREE.BufferGeometry());
-  const frameCount = useRef(0);
+  
+  // Initialize geometry with empty points
+  const [geometry] = useState(() => new THREE.BufferGeometry());
+  const material = useMemo(() => new THREE.LineBasicMaterial({ 
+    color: body.color, 
+    transparent: true,
+    opacity: 0.7
+  }), [body.color]);
 
   useFrame(() => {
     if (!trailRef.current) return;
     
-    // Add current position to trail every few frames to reduce performance impact
-    frameCount.current++;
-    if (frameCount.current % 2 === 0) { // Update trail every 2 frames
-      trailPoints.current.push(body.position.clone());
-      
-      // Limit trail length
-      if (trailPoints.current.length > trailLength) {
-        trailPoints.current.shift();
-      }
-      
-      // Update trail geometry
-      if (trailPoints.current.length > 1) {
-        trailGeometry.current.setFromPoints(trailPoints.current);
-      }
+    // Add current position to trail
+    trailPoints.current.push(body.position.clone());
+    
+    // Limit trail length
+    if (trailPoints.current.length > trailLength) {
+      trailPoints.current.shift();
+    }
+    
+    // Update trail geometry
+    if (trailPoints.current.length > 1) {
+      const positions = trailPoints.current.flatMap(point => [point.x, point.y, point.z]);
+      geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+      geometry.attributes.position.needsUpdate = true;
     }
   });
 
   // Reset trail when body changes
   useEffect(() => {
     trailPoints.current = [body.position.clone()];
-    trailGeometry.current.setFromPoints(trailPoints.current);
-  }, [body.id]); // Reset when body ID changes (e.g., after merge)
+  }, [body.id]);
 
-  if (trailPoints.current.length < 2) return null;
+  if (trailPoints.current.length < 2) {
+    return null;
+  }
 
   return (
-    <line ref={trailRef} geometry={trailGeometry.current}>
-      <lineBasicMaterial 
-        attach="material" 
-        color={body.color} 
-        opacity={0.6} 
-        transparent 
-        linewidth={1}
-      />
-    </line>
+    <line ref={trailRef} geometry={geometry} material={material} />
   );
 }
 
