@@ -133,7 +133,7 @@ function PlanetTrail({ body, trailLength = 100, enabled = true }) {
   const material = useMemo(() => new THREE.LineBasicMaterial({ 
     color: body.color, 
     transparent: true,
-    opacity: 0.7
+    opacity: 1.0
   }), [body.color]);
 
   useFrame(() => {
