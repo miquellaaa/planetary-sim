@@ -4,7 +4,7 @@ import { OrbitControls, Html } from "@react-three/drei";
 import * as THREE from "three";
 
 // -----------------------------
-// Planetary N-body simulation with analytic orbital paths
+// Planetary N-body simulation with predictive orbital paths
 // -----------------------------
 
 const v3 = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
@@ -92,99 +92,97 @@ function mergeBodies(a, b) {
   return { id: `${a.id}_${b.id}_m`, name: `${a.name}–${b.name}`, mass, radius, color, position: pos, velocity: vel, fixed: false };
 }
 
-// Compute analytic elliptical orbit points based on current state
-function calculateOrbitPoints(body, primary) {
-  if (!primary || body.fixed) return [];
-  
-  // Calculate orbital elements from current state
-  const r = body.position.clone().sub(primary.position);
-  const v = body.velocity.clone();
-  
-  const mu = G * primary.mass;
-  const rMag = r.length();
-  const vMag = v.length();
-  
-  // Specific angular momentum
-  const h = r.clone().cross(v);
-  const hMag = h.length();
-  
-  // Eccentricity vector
-  const eVec = v.clone().cross(h).multiplyScalar(1/mu)
-    .sub(r.clone().multiplyScalar(1/rMag));
-  const e = eVec.length();
-  
-  // Semi-major axis
-  const a = 1 / (2/rMag - (vMag*vMag)/mu);
-  
-  // Semi-minor axis
-  const b = a * Math.sqrt(1 - e*e);
-  
-  // If orbit is hyperbolic or parabolic, show a reasonable approximation
-  if (a <= 0 || e >= 1) {
-    // For escape trajectories, show a partial arc
-    const segments = 64;
-    const positions = [];
-    for (let i = 0; i <= segments; i++) {
-      const theta = (i / segments) * Math.PI; // Only half orbit for escape
-      const rCurrent = (a * (1 - e*e)) / (1 + e * Math.cos(theta));
-      positions.push(new THREE.Vector3(
-        Math.cos(theta) * rCurrent,
-        0,
-        Math.sin(theta) * rCurrent
-      ));
-    }
-    return positions;
+// Calculate gravitational acceleration for a body given all other bodies
+function calculateAcceleration(body, allBodies) {
+  const acc = v3(0, 0, 0);
+  for (const other of allBodies) {
+    if (other.id === body.id) continue;
+    const r = new THREE.Vector3().subVectors(other.position, body.position);
+    const dist2 = r.lengthSq() + 1e-6;
+    const aMag = (G * other.mass) / dist2;
+    acc.add(r.normalize().multiplyScalar(aMag));
   }
-  
-  // Regular elliptical orbit
-  const segments = 128;
-  const positions = [];
-  for (let i = 0; i <= segments; i++) {
-    const theta = (i / segments) * 2 * Math.PI;
-    const rCurrent = (a * (1 - e*e)) / (1 + e * Math.cos(theta));
-    positions.push(new THREE.Vector3(
-      Math.cos(theta) * rCurrent,
-      0,
-      Math.sin(theta) * rCurrent
-    ));
-  }
-  
-  return positions;
+  return acc;
 }
 
-// Dynamic orbit path that updates in real-time
-function DynamicOrbitPath({ body, primary }) {
+// Predict future path using current physics simulation
+function calculatePredictedPath(body, allBodies, steps = 200, stepSize = 0.1) {
+  if (body.fixed) return [];
+  
+  // Create copies for simulation
+  const simulatedBodies = allBodies.map(b => ({
+    ...b,
+    position: b.position.clone(),
+    velocity: b.velocity.clone()
+  }));
+  
+  const currentBody = simulatedBodies.find(b => b.id === body.id);
+  const pathPoints = [currentBody.position.clone()];
+  
+  // Simulate forward in time
+  for (let step = 0; step < steps; step++) {
+    // Calculate accelerations for all bodies
+    const accs = simulatedBodies.map(b => calculateAcceleration(b, simulatedBodies));
+    
+    // Update velocities and positions (semi-implicit Euler)
+    for (let i = 0; i < simulatedBodies.length; i++) {
+      const b = simulatedBodies[i];
+      if (b.fixed) continue;
+      b.velocity.add(accs[i].clone().multiplyScalar(stepSize));
+      b.position.add(b.velocity.clone().multiplyScalar(stepSize));
+    }
+    
+    // Add current position to path
+    pathPoints.push(currentBody.position.clone());
+  }
+  
+  return pathPoints;
+}
+
+// Dynamic predictive path that shows actual simulation trajectory
+function PredictiveOrbitPath({ body, allBodies }) {
   const ref = useRef();
   const [geometry] = useState(() => new THREE.BufferGeometry());
+  const lastUpdate = useRef(0);
   
   const material = useMemo(() => new THREE.LineBasicMaterial({ 
     color: body.color, 
     opacity: 0.4, 
-    transparent: true 
+    transparent: true,
+    linewidth: 1
   }), [body.color]);
 
-  useFrame(() => {
-    if (!ref.current || !primary) return;
+  useFrame((state) => {
+    if (!ref.current || body.fixed) return;
     
-    const points = calculateOrbitPoints(body, primary);
+    // Only update path every 10 frames for performance
+    if (lastUpdate.current < 10) {
+      lastUpdate.current++;
+      return;
+    }
+    lastUpdate.current = 0;
     
-    if (points.length > 1) {
-      const positions = new Float32Array(points.flatMap(p => [p.x, p.y, p.z]));
+    const pathPoints = calculatePredictedPath(body, allBodies, 150, 0.15);
+    
+    if (pathPoints.length > 1) {
+      const positions = new Float32Array(pathPoints.flatMap(p => [p.x, p.y, p.z]));
       geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
       geometry.attributes.position.needsUpdate = true;
     }
   });
 
-  // Initial setup
+  // Update when body properties change significantly
   useEffect(() => {
-    const points = calculateOrbitPoints(body, primary);
-    if (points.length > 1) {
-      const positions = new Float32Array(points.flatMap(p => [p.x, p.y, p.z]));
+    if (body.fixed) return;
+    
+    const pathPoints = calculatePredictedPath(body, allBodies, 150, 0.15);
+    if (pathPoints.length > 1) {
+      const positions = new Float32Array(pathPoints.flatMap(p => [p.x, p.y, p.z]));
       geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
     }
-  }, [body.id, primary?.id, geometry]);
+  }, [body.id, body.mass, body.velocity.x, body.velocity.y, body.velocity.z, geometry]);
 
-  if (!primary || body.fixed) return null;
+  if (body.fixed) return null;
 
   return (
     <line ref={ref} geometry={geometry} material={material} />
@@ -224,6 +222,7 @@ export default function PlanetarySimulation() {
   const [timeScale, setTimeScale] = useState(1.0);
   const [log, setLog] = useState([]);
   const [showOrbits, setShowOrbits] = useState(true);
+  const [predictionSteps, setPredictionSteps] = useState(150);
 
   const primary = useMemo(() => bodies.reduce((acc, b) => (b.mass > (acc?.mass || 0) ? b : acc), null), [bodies]);
 
@@ -333,7 +332,7 @@ export default function PlanetarySimulation() {
           <pointLight position={[0, 0, 0]} intensity={2} />
 
           {showOrbits && bodies.map((b) => !b.fixed && (
-            <DynamicOrbitPath key={b.id} body={b} primary={primary} />
+            <PredictiveOrbitPath key={b.id} body={b} allBodies={bodies} />
           ))}
           {bodies.map((b) => (
             <PlanetMesh 
@@ -352,7 +351,7 @@ export default function PlanetarySimulation() {
       <div className="w-1/4 h-full bg-gray-900 text-white p-4 overflow-auto">
         <h2 className="text-xl font-semibold mb-2">3D Planetary Simulator</h2>
         <div className="mb-2 text-sm text-gray-300">
-          Click a planet to edit its properties. Orbit paths update in real-time.
+          Click a planet to edit its properties. Paths show predicted trajectory.
         </div>
 
         <div className="mb-3 flex flex-wrap gap-2">
@@ -381,8 +380,21 @@ export default function PlanetarySimulation() {
         </div>
 
         <div className="mb-3">
+          <label className="block text-xs text-gray-400">Prediction Length: {predictionSteps}</label>
+          <input 
+            type="range" 
+            min="50" 
+            max="300" 
+            step="10" 
+            value={predictionSteps} 
+            onChange={(e) => setPredictionSteps(parseInt(e.target.value))} 
+            className="w-full" 
+          />
+        </div>
+
+        <div className="mb-3">
           <div className="flex items-center justify-between">
-            <label className="text-sm">Show Orbit Paths</label>
+            <label className="text-sm">Show Predicted Paths</label>
             <input
               type="checkbox"
               checked={showOrbits}
