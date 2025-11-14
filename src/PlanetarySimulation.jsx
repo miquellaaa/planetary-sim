@@ -1,89 +1,71 @@
-import React, { useRef, useState, useMemo } from "react";
+import React, { useRef, useState, useMemo, useEffect } from "react";
 import { Canvas, useFrame } from "@react-three/fiber";
 import { OrbitControls, Html } from "@react-three/drei";
 import * as THREE from "three";
 
 // -----------------------------
-// Utility
+// Planetary N-body simulation with analytic orbital paths
 // -----------------------------
-const v3 = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
-const G = 1; // scaled gravitational constant
 
-// -----------------------------
-// Default bodies
-// -----------------------------
-const defaultBodies = () => [
-  {
+const v3 = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
+const G = 0.2;
+
+// Generate planets with initial circular orbit around Sun
+const defaultBodies = () => {
+  const sun = {
     id: "sun",
     name: "Sun",
-    mass: 330000,
-    radius: 5,
+    mass: 4000,
+    radius: 2.4,
     color: "#ffcc66",
     position: v3(0, 0, 0),
     velocity: v3(0, 0, 0),
     fixed: true,
-  },
-  {
-    id: "mercury",
-    name: "Mercury",
-    mass: 0.055,
-    radius: 1.2,
-    color: "#c0b090",
-    position: v3(8, 0, 0),
-    velocity: v3(0, 4.5, 0),
-  },
-  {
-    id: "venus",
-    name: "Venus",
-    mass: 0.815,
-    radius: 1.5,
-    color: "#d9c59a",
-    position: v3(12, 0, 0),
-    velocity: v3(0, 3.5, 0),
-  },
-  {
-    id: "earth",
-    name: "Earth",
-    mass: 1,
-    radius: 1.6,
-    color: "#4da6ff",
-    position: v3(17, 0, 0),
-    velocity: v3(0, 3.0, 0),
-  },
-  {
-    id: "mars",
-    name: "Mars",
-    mass: 0.107,
-    radius: 1.4,
-    color: "#ff8a66",
-    position: v3(22, 0, 0),
-    velocity: v3(0, 2.4, 0),
-  },
-];
+  };
 
-// -----------------------------
-// Physics
-// -----------------------------
+  // circular orbits: v = sqrt(G*M/r)
+  const planets = [
+    { name: "Planet A", color: "#4da6ff", radius: 0.6, mass: 10, distance: 10 },
+    { name: "Planet B", color: "#ff8a66", radius: 0.46, mass: 6, distance: 14 },
+    { name: "Planet C", color: "#66ff99", radius: 0.5, mass: 4, distance: 18 },
+  ];
+
+  const planetBodies = planets.map((p, i) => {
+    const angle = (i * Math.PI) / 3; // slight rotation offset
+    const pos = v3(Math.cos(angle) * p.distance, 0, Math.sin(angle) * p.distance);
+    const speed = Math.sqrt((G * sun.mass) / p.distance);
+    const vel = v3(-Math.sin(angle) * speed, 0, Math.cos(angle) * speed);
+    return {
+      id: p.name.toLowerCase().replace(/\s/g, "_"),
+      name: p.name,
+      mass: p.mass,
+      radius: p.radius,
+      color: p.color,
+      position: pos,
+      velocity: vel,
+      fixed: false,
+    };
+  });
+
+  return [sun, ...planetBodies];
+};
+
+// Physics integrator (semi-implicit)
 function stepPhysics(bodies, dt) {
-  const accs = bodies.map(() => v3());
+  const accs = bodies.map(() => v3(0, 0, 0));
 
   for (let i = 0; i < bodies.length; i++) {
     const bi = bodies[i];
-    if (bi.fixed) continue;
-
     for (let j = 0; j < bodies.length; j++) {
       if (i === j) continue;
-
       const bj = bodies[j];
-      const r = bj.position.clone().sub(bi.position);
-      const dist2 = r.lengthSq() + 0.01;
-      const dist = Math.sqrt(dist2);
+      const r = new THREE.Vector3().subVectors(bj.position, bi.position);
+      const dist2 = r.lengthSq() + 1e-6;
       const aMag = (G * bj.mass) / dist2;
-      accs[i].add(r.multiplyScalar(aMag / dist));
+      accs[i].add(r.normalize().multiplyScalar(aMag));
     }
   }
 
-  // Integrate
   for (let i = 0; i < bodies.length; i++) {
     const b = bodies[i];
     if (b.fixed) continue;
@@ -92,134 +74,188 @@ function stepPhysics(bodies, dt) {
   }
 }
 
-// -----------------------------
-// Merge bodies on collision
-// -----------------------------
+// Merge two bodies (inelastic)
 function mergeBodies(a, b) {
   const mass = a.mass + b.mass;
-  const pos = a.position.clone().multiplyScalar(a.mass)
+  const pos = a.position
+    .clone()
+    .multiplyScalar(a.mass)
     .add(b.position.clone().multiplyScalar(b.mass))
-    .divideScalar(mass);
-  const vel = a.velocity.clone().multiplyScalar(a.mass)
+    .multiplyScalar(1 / mass);
+  const vel = a.velocity
+    .clone()
+    .multiplyScalar(a.mass)
     .add(b.velocity.clone().multiplyScalar(b.mass))
-    .divideScalar(mass);
-  const radius = Math.cbrt(a.radius ** 3 + b.radius ** 3);
+    .multiplyScalar(1 / mass);
+  const radius = Math.cbrt(Math.pow(a.radius, 3) + Math.pow(b.radius, 3));
   const color = a.mass >= b.mass ? a.color : b.color;
-  return { id: `${a.id}_${b.id}`, name: `${a.name}-${b.name}`, mass, radius, color, position: pos, velocity: vel, fixed: false };
+  return { id: `${a.id}_${b.id}_m`, name: `${a.name}–${b.name}`, mass, radius, color, position: pos, velocity: vel, fixed: false };
 }
 
-// -----------------------------
-// Planet Mesh
-// -----------------------------
-function Planet({ body, onClick }) {
+// Compute analytic orbit points (ellipses)
+function OrbitPath({ body, primary }) {
   const ref = useRef();
-  useFrame(() => {
-    if (ref.current) ref.current.position.copy(body.position);
-  });
-  return (
-    <mesh ref={ref} onClick={() => onClick(body)}>
-      <sphereGeometry args={[body.radius, 32, 32]} />
-      <meshStandardMaterial color={body.color} metalness={0.2} roughness={0.7} />
-      <Html center distanceFactor={10} position={[0, body.radius + 0.3, 0]}>
-        <div className="bg-black bg-opacity-50 text-white text-xs px-1 py-0.5 rounded">{body.name}</div>
-      </Html>
-    </mesh>
-  );
-}
+  const points = useMemo(() => {
+    if (!primary) return [];
+    const r = body.position.clone().sub(primary.position).length();
+    const segments = 128;
+    const positions = [];
+    for (let i = 0; i <= segments; i++) {
+      const theta = (i / segments) * 2 * Math.PI;
+      positions.push(new THREE.Vector3(Math.cos(theta) * r, 0, Math.sin(theta) * r));
+    }
+    return positions;
+  }, [body, primary]);
 
-// -----------------------------
-// Orbit Trail
-// -----------------------------
-function OrbitTrail({ body, maxPoints = 300 }) {
-  const ref = useRef();
-  const points = useRef([]);
-  useFrame(() => {
-    points.current.push(body.position.clone());
-    if (points.current.length > maxPoints) points.current.shift();
-    if (ref.current) ref.current.geometry.setFromPoints(points.current);
-  });
   return (
-    <line>
-      <bufferGeometry ref={ref} />
-      <lineBasicMaterial color={body.color} linewidth={1} />
+    <line ref={ref}>
+      <bufferGeometry attach="geometry" setFromPoints={points} />
+      <lineBasicMaterial attach="material" color={body.color} linewidth={1} opacity={0.4} transparent />
     </line>
   );
 }
 
-// -----------------------------
-// Main Simulation
-// -----------------------------
+// Planet mesh component
+function PlanetMesh({ body, onClick, showLabel }) {
+  const ref = useRef();
+  useFrame(() => {
+    if (ref.current) ref.current.position.copy(body.position);
+  });
+
+  return (
+    <mesh ref={ref} onClick={(e) => onClick(body)}>
+      <sphereGeometry args={[body.radius, 32, 32]} />
+      <meshStandardMaterial color={body.color} metalness={0.2} roughness={0.7} />
+      {showLabel && (
+        <Html distanceFactor={10} position={[0, body.radius + 0.3, 0]} center>
+          <div className="bg-black bg-opacity-60 text-white text-xs px-2 py-1 rounded">{body.name}</div>
+        </Html>
+      )}
+    </mesh>
+  );
+}
+
 export default function PlanetarySimulation() {
-  const [bodies, setBodies] = useState(defaultBodies());
+  const [bodies, setBodies] = useState(() => defaultBodies());
   const bodiesRef = useRef(bodies);
   bodiesRef.current = bodies;
 
   const [running, setRunning] = useState(true);
+  const [selectedId, setSelectedId] = useState(null);
+  const [timeScale, setTimeScale] = useState(1.0);
+  const [log, setLog] = useState([]);
 
-  // Physics loop
-  useFrame((_, delta) => {
-    if (!running) return;
+  const primary = useMemo(() => bodies.reduce((acc, b) => (b.mass > (acc?.mass || 0) ? b : acc), null), [bodies]);
 
-    const copy = bodiesRef.current.map(b => ({ ...b, position: b.position.clone(), velocity: b.velocity.clone() }));
-    stepPhysics(copy, delta);
+  function PhysicsRunner() {
+    const last = useRef(performance.now());
+    useFrame(() => {
+      const now = performance.now();
+      let dt = (now - last.current) / 1000;
+      last.current = now;
+      if (!running) return;
+      dt = Math.min(dt, 0.05);
+      const step = dt * timeScale;
 
-    // collision detection
-    for (let i = 0; i < copy.length; i++) {
-      for (let j = i + 1; j < copy.length; j++) {
-        const a = copy[i], b = copy[j];
-        if (a.fixed || b.fixed) continue;
-        if (a.position.distanceTo(b.position) < a.radius + b.radius) {
-          const merged = mergeBodies(a, b);
-          copy.splice(j, 1);
-          copy.splice(i, 1, merged);
-          break;
+      const copy = bodiesRef.current.map((b) => ({ ...b, position: b.position.clone(), velocity: b.velocity.clone() }));
+      stepPhysics(copy, step);
+
+      // collisions
+      let collided = false;
+      for (let i = 0; i < copy.length; i++) {
+        for (let j = i + 1; j < copy.length; j++) {
+          const a = copy[i];
+          const b = copy[j];
+          const dist = a.position.distanceTo(b.position);
+          if (dist <= a.radius + b.radius && !a.fixed && !b.fixed) {
+            const merged = mergeBodies(a, b);
+            copy.splice(j, 1);
+            copy.splice(i, 1, merged);
+            collided = true;
+            setLog((L) => [`Merged ${a.name} + ${b.name} → ${merged.name}`, ...L].slice(0, 10));
+            break;
+          }
         }
+        if (collided) break;
       }
-    }
 
-    setBodies(copy);
-  });
+      setBodies(copy);
+    });
+    return null;
+  }
+
+  const selected = bodies.find((b) => b.id === selectedId) || null;
+  const updateSelected = (changes) => setBodies((prev) => prev.map((b) => (b.id === selectedId ? { ...b, ...changes } : b)));
 
   function addPlanet() {
-    const id = "p_" + Math.random().toString(36).slice(2);
-    setBodies((prev) => [
-      ...prev,
-      {
-        id,
-        name: `Planet ${prev.length}`,
-        mass: 1,
-        radius: 1,
-        color: "#" + Math.floor(Math.random() * 0xffffff).toString(16),
-        position: v3(10 + Math.random() * 20, 0, 0),
-        velocity: v3(0, 2.5 + Math.random(), 0),
-      }
-    ]);
+    const id = `p_${Math.random().toString(36).slice(2, 8)}`;
+    const r = 10 + Math.random() * 10;
+    const angle = Math.random() * 2 * Math.PI;
+    const speed = Math.sqrt((G * primary.mass) / r);
+    const pos = v3(Math.cos(angle) * r, 0, Math.sin(angle) * r);
+    const vel = v3(-Math.sin(angle) * speed, 0, Math.cos(angle) * speed);
+    const p = { id, name: `Planet ${bodies.length}`, mass: 4, radius: 0.5, color: `#${Math.floor(Math.random() * 0xffffff).toString(16).padStart(6, "0")}`, position: pos, velocity: vel, fixed: false };
+    setBodies((b0) => [...b0, p]);
+  }
+
+  function reset() {
+    setBodies(defaultBodies());
+    setLog([]);
+    setSelectedId(null);
   }
 
   return (
     <div className="w-full h-screen flex">
-      <div className="w-3/4 h-full bg-black">
-        <Canvas camera={{ position: [0, 30, 40], fov: 60 }}>
-          <ambientLight intensity={1.2} />
-          <directionalLight position={[10, 20, 10]} intensity={2} />
-          <pointLight position={[0, 0, 0]} intensity={1.5} />
+      <div className="w-3/4 h-full bg-black relative">
+        <Canvas camera={{ position: [0, 25, 40], fov: 60 }}>
+          <ambientLight intensity={0.4} />
+          <pointLight position={[0, 0, 0]} intensity={2} />
 
-          {bodies.map(b => (
-            <React.Fragment key={b.id}>
-              {!b.fixed && <OrbitTrail body={b} />}
-              <Planet body={b} onClick={() => {}} />
-            </React.Fragment>
+          {bodies.map((b) => b !== primary && <OrbitPath key={b.id} body={b} primary={primary} />)}
+          {bodies.map((b) => (
+            <PlanetMesh key={b.id} body={b} onClick={(body) => setSelectedId(body.id)} showLabel={true} />
           ))}
 
-          <OrbitControls />
+          <OrbitControls enablePan enableZoom />
+          <PhysicsRunner />
         </Canvas>
       </div>
-      <div className="w-1/4 h-full bg-gray-900 text-white p-4">
+
+      <div className="w-1/4 h-full bg-gray-900 text-white p-4 overflow-auto">
         <h2 className="text-xl font-semibold mb-2">3D Planetary Simulator</h2>
-        <button className="bg-blue-600 px-3 py-1 mr-2 rounded" onClick={() => setRunning(r => !r)}>
-          {running ? "Pause" : "Run"}
-        </button>
-        <button className="bg-green-600 px-3 py-1 rounded" onClick={addPlanet}>Add Planet</button>
+        <div className="mb-2 text-sm text-gray-300">Click a planet in the 3D view to edit its properties in real-time.</div>
+
+        <div className="mb-3">
+          <button className="bg-blue-600 hover:bg-blue-500 px-3 py-1 rounded mr-2" onClick={() => setRunning((r) => !r)}>
+            {running ? "Pause" : "Run"}
+          </button>
+          <button className="bg-green-600 hover:bg-green-500 px-3 py-1 rounded mr-2" onClick={addPlanet}>
+            Add Planet
+          </button>
+          <button className="bg-red-600 hover:bg-red-500 px-3 py-1 rounded" onClick={reset}>
+            Reset
+          </button>
+        </div>
+
+        <div className="mb-3">
+          <label className="block text-xs text-gray-400">Time scale: {timeScale.toFixed(2)}</label>
+          <input type="range" min="0.01" max="10" step="0.01" value={timeScale} onChange={(e) => setTimeScale(parseFloat(e.target.value))} className="w-full" />
+        </div>
+
+        <div className="mb-3">
+          <h3 className="font-medium">Bodies</h3>
+          <div className="text-sm text-gray-300">
+            {bodies.map((b) => (
+              <div key={b.id} className={`p-2 border rounded mt-2 cursor-pointer flex items-center justify-between ${selectedId === b.id ? "border-yellow-400" : "border-gray-700"}`} onClick={() => setSelectedId(b.id)}>
+                <div>
+                  <div className="text-sm">{b.name}</div>
+                  <div className="text-xs text-gray-400">mass: {b.mass.toFixed(2)} • r: {b.radius.toFixed(2)}</div>
+                </div>
+                <div style={{ width: 14, height: 14, background: b.color, borderRadius: 4 }} />
+              </div>
+            ))}
+          </div>
+        </div>
       </div>
     </div>
   );
