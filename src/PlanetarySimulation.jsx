@@ -132,7 +132,7 @@ function PlanetTrail({ body, trailLength = 100, enabled = true }) {
   const [geometry] = useState(() => new THREE.BufferGeometry());
   const material = useMemo(() => new THREE.LineBasicMaterial({ 
     color: body.color, 
-    transparent: true,
+    transparent: false,
     opacity: 1.0
   }), [body.color]);
 
