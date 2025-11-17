@@ -12,42 +12,77 @@ const G = 0.2;
 
 // Generate planets with initial circular orbit around Sun
 const defaultBodies = () => {
+
+  // Mass scale factor (makes numbers workable in simulation)
+  const MASS_SCALE = 1e-6;
+
+  const AU = 20; // 1 AU = 20 simulation units
+
   const sun = {
     id: "sun",
     name: "Sun",
-    mass: 4000,
-    radius: 2.4,
+    mass: 1.989e30 * MASS_SCALE,   // scaled
+    radius: 3.5,
     color: "#ffcc66",
     position: v3(0, 0, 0),
     velocity: v3(0, 0, 0),
     fixed: true,
   };
 
-  // circular orbits: v = sqrt(G*M/r)
+  // BASIC PLANET DATA (realistic)
   const planets = [
-    { name: "Planet A", color: "#4da6ff", radius: 0.6, mass: 10, distance: 10 },
-    { name: "Planet B", color: "#ff8a66", radius: 0.46, mass: 6, distance: 14 },
-    { name: "Planet C", color: "#66ff99", radius: 0.5, mass: 4, distance: 18 },
+    // name,  mass(kg),       radius, distance AU, eccentricity, color
+    ["Mercury", 3.30e23, 0.38, 0.39, 0.205, "#c2b280"],
+    ["Venus",   4.87e24, 0.95, 0.72, 0.007, "#d9c38a"],
+    ["Earth",   5.97e24, 1.00, 1.00, 0.017, "#4da6ff"],
+    ["Mars",    6.42e23, 0.53, 1.52, 0.094, "#ff704d"],
+    ["Jupiter", 1.90e27, 11.2, 5.20, 0.049, "#d9a066"],
+    ["Saturn",  5.68e26, 9.4,  9.58, 0.056, "#e3c179"],
+    ["Uranus",  8.68e25, 4.0, 19.2, 0.047, "#aee7ff"],
+    ["Neptune", 1.02e26, 3.9, 30.0, 0.009, "#497fff"]
   ];
 
-  const planetBodies = planets.map((p, i) => {
-    const angle = (i * Math.PI) / 3; // slight rotation offset
-    const pos = v3(Math.cos(angle) * p.distance, 0, Math.sin(angle) * p.distance);
-    const speed = Math.sqrt((G * sun.mass) / p.distance);
-    const vel = v3(-Math.sin(angle) * speed, 0, Math.cos(angle) * speed);
-    return {
-      id: p.name.toLowerCase().replace(/\s/g, "_"),
-      name: p.name,
-      mass: p.mass,
-      radius: p.radius,
-      color: p.color,
+  const bodies = [sun];
+
+  planets.forEach(([name, mass, radius, distanceAU, ecc, color]) => {
+    const massSim = mass * MASS_SCALE;
+
+    // Convert AU → scene units
+    const a = distanceAU * AU;  // semi-major axis
+    const e = ecc;
+
+    // Start at perihelion for visible elliptical differences
+    const r = a * (1 - e);
+
+    // Random angle for non-aligned orbits
+    const theta = Math.random() * Math.PI * 2;
+
+    const pos = v3(Math.cos(theta) * r, 0, Math.sin(theta) * r);
+
+    // Orbital velocity (vis-viva equation): v = sqrt(GM (2/r - 1/a))
+    const GM = G * sun.mass;
+    const speed = Math.sqrt(GM * (2 / r - 1 / a));
+
+    // Velocity perpendicular to radius vector
+    const vel = v3(
+      -Math.sin(theta) * speed,
+      0,
+      Math.cos(theta) * speed
+    );
+
+    bodies.push({
+      id: name.toLowerCase(),
+      name,
+      mass: massSim,
+      radius: radius * 0.15, // scale down radii so everything fits visually
+      color,
       position: pos,
       velocity: vel,
       fixed: false,
-    };
+    });
   });
 
-  return [sun, ...planetBodies];
+  return bodies;
 };
 
 // Physics integrator (semi-implicit)
