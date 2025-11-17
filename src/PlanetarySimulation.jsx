@@ -69,7 +69,7 @@ function defaultBodies() {
   // Original planet spacing but with increased distances from sun
   const defs = [
     // [name, massRel, radiusRel, aAU, e, incDeg, color, glowColor, initialNu]
-    ["Mercury", 0.055, 0.6, 0.9, 0.205, 7.0, "#b8a17a", "#d4c4a8", Math.PI * 0.7],    // Increased from 0.45 to 0.6 AU
+    ["Mercury", 0.055, 0.6, 0.7, 0.205, 7.0, "#b8a17a", "#d4c4a8", Math.PI * 0.7],    // Increased from 0.45 to 0.6 AU
     ["Venus", 0.815, 1.1, 1.15, 0.007, 3.39, "#e6d5b8", "#f5e9d5", Math.PI * 0.3],    // Increased from 0.75 to 0.85 AU
     ["Earth", 1.0, 1.2, 1.3, 0.017, 0.0, "#6bb5ff", "#a3d1ff", Math.PI * 0.5],        // Increased from 1.0 to 1.1 AU
     ["Mars", 0.107, 0.8, 2.0, 0.094, 1.85, "#ff8c69", "#ffb5a3", Math.PI * 0.8],      // Slight increase from 1.6 to 1.7 AU
