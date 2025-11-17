@@ -4,12 +4,12 @@ import { OrbitControls, Html } from "@react-three/drei";
 import * as THREE from "three";
 
 /*
-  Improved predictive ellipse generator with proper mass-radius relationship
+  Solar system with compressed orbits but maintained relative sizes
 */
 const v3 = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
 
 const G = 0.12;
-const AU = 15;
+const AU = 8; // Reduced from 15 to 8 for closer planet spacing
 const SUN_MASS = 10000;
 
 // Convert orbital elements -> Cartesian
@@ -49,14 +49,14 @@ function orbitalElementsToState(a, e, i, omega, Omega, nu, mu) {
   return { position: pos, velocity: vel };
 }
 
-// Enhanced default bodies with better Mercury positioning
+// Compressed solar system with closer planet spacing
 function defaultBodies() {
   const sun = {
     id: "sun",
     name: "Sun",
     mass: SUN_MASS,
-    radius: 4.0,
-    baseRadius: 4.0,
+    radius: 3.0, // Slightly smaller sun since planets are closer
+    baseRadius: 3.0,
     color: "#ffaa33",
     glowColor: "#ff6600",
     position: v3(0, 0, 0),
@@ -66,16 +66,17 @@ function defaultBodies() {
     importance: 10,
   };
 
+  // Compressed orbits: planets closer together but maintaining relative distances
   const defs = [
-    // Mercury: increased distance and adjusted true anomaly to avoid sun intersection
-    ["Mercury", 0.055, 0.6, 0.55, 0.205, 7.0, "#b8a17a", "#d4c4a8", Math.PI * 0.7], // Added initial true anomaly
-    ["Venus", 0.815, 1.1, 0.75, 0.007, 3.39, "#e6d5b8", "#f5e9d5", Math.PI * 0.3],
-    ["Earth", 1.0, 1.2, 1.0, 0.017, 0.0, "#6bb5ff", "#a3d1ff", Math.PI * 0.5],
-    ["Mars", 0.107, 0.8, 1.6, 0.094, 1.85, "#ff8c69", "#ffb5a3", Math.PI * 0.8],
-    ["Jupiter", 317.8, 2.4, 5.5, 0.049, 1.305, "#e0b580", "#f0d9b5", Math.PI * 0.2],
-    ["Saturn", 95.2, 2.1, 9.8, 0.056, 2.485, "#f0d9a4", "#f8ecca", Math.PI * 0.6],
-    ["Uranus", 14.5, 1.6, 19.5, 0.047, 0.773, "#c6f7ff", "#e3fbff", Math.PI * 0.4],
-    ["Neptune", 17.15, 1.6, 30.5, 0.009, 1.77, "#6b9fff", "#a3c2ff", Math.PI * 0.9],
+    // [name, massRel, radiusRel, aAU, e, incDeg, color, glowColor, initialNu]
+    ["Mercury", 0.055, 0.6, 0.8, 0.205, 7.0, "#b8a17a", "#d4c4a8", Math.PI * 0.7],    // Increased from 0.55 to 0.8 AU
+    ["Venus", 0.815, 1.1, 1.1, 0.007, 3.39, "#e6d5b8", "#f5e9d5", Math.PI * 0.3],     // Increased from 0.75 to 1.1 AU
+    ["Earth", 1.0, 1.2, 1.4, 0.017, 0.0, "#6bb5ff", "#a3d1ff", Math.PI * 0.5],        // Increased from 1.0 to 1.4 AU
+    ["Mars", 0.107, 0.8, 1.8, 0.094, 1.85, "#ff8c69", "#ffb5a3", Math.PI * 0.8],      // Increased from 1.6 to 1.8 AU
+    ["Jupiter", 317.8, 2.4, 3.0, 0.049, 1.305, "#e0b580", "#f0d9b5", Math.PI * 0.2],  // Drastically reduced from 5.5 to 3.0 AU
+    ["Saturn", 95.2, 2.1, 4.0, 0.056, 2.485, "#f0d9a4", "#f8ecca", Math.PI * 0.6],    // Reduced from 9.8 to 4.0 AU
+    ["Uranus", 14.5, 1.6, 5.0, 0.047, 0.773, "#c6f7ff", "#e3fbff", Math.PI * 0.4],    // Reduced from 19.5 to 5.0 AU
+    ["Neptune", 17.15, 1.6, 6.0, 0.009, 1.77, "#6b9fff", "#a3c2ff", Math.PI * 0.9],   // Reduced from 30.5 to 6.0 AU
   ];
 
   const bodies = [sun];
@@ -85,7 +86,7 @@ function defaultBodies() {
     const i = (incDeg * Math.PI) / 180;
     const omega = (Math.random() - 0.5) * 0.4;
     const Omega = (Math.random() - 0.5) * 0.4;
-    const nu = initialNu || Math.random() * Math.PI * 2; // Use provided initial anomaly or random
+    const nu = initialNu || Math.random() * Math.PI * 2;
     const mass = massRel;
     const mu = G * (SUN_MASS + mass);
     const { position: posOrb, velocity: velOrb } = orbitalElementsToState(a, e, i, omega, Omega, nu, mu);
@@ -99,8 +100,8 @@ function defaultBodies() {
       id: name.toLowerCase(),
       name,
       mass,
-      radius: Math.max(0.4, radiusRel * 0.22),
-      baseRadius: Math.max(0.4, radiusRel * 0.22),
+      radius: Math.max(0.4, radiusRel * 0.25), // Slightly increased relative sizes
+      baseRadius: Math.max(0.4, radiusRel * 0.25),
       color,
       glowColor: glowColor || color,
       position: posOrb.clone(),
@@ -109,7 +110,7 @@ function defaultBodies() {
       kepler,
       fixed: false,
       importance: 8 - idx * 0.5,
-      orbitalElements: { a, e, i, omega, Omega, nu }, // Store for path calculation
+      orbitalElements: { a, e, i, omega, Omega, nu },
     });
   }
 
@@ -180,7 +181,7 @@ function computeEllipsePointsFromState(body, bodies, steps = 300) {
 
   // Calculate periapsis distance and ensure it clears the sun
   const periapsis = a * (1 - e);
-  const minSafeDistance = sun.radius + body.radius + 2.0; // Safe margin
+  const minSafeDistance = sun.radius + body.radius + 1.5; // Reduced safe margin since planets are closer
   
   if (periapsis < minSafeDistance) {
     // Adjust the ellipse points to ensure they don't intersect the sun
@@ -245,12 +246,12 @@ function PlanetMesh({ body, onClick, showLabel, cameraDistance, onOrbitUpdate })
     if (!cameraDistance) return body.radius;
     
     const baseScale = 1.0;
-    const distanceFactor = Math.min(1, cameraDistance / 200);
-    const minVisibleSize = 0.8;
-    const scale = baseScale + (distanceFactor * 2);
+    const distanceFactor = Math.min(1, cameraDistance / 150); // Adjusted for closer system
+    const minVisibleSize = 0.6; // Smaller minimum size since planets are closer
+    const scale = baseScale + (distanceFactor * 1.5); // Reduced scaling factor
     
     const isInnerPlanet = body.baseRadius < 1.0;
-    const aggressiveScale = isInnerPlanet ? scale * 1.5 : scale;
+    const aggressiveScale = isInnerPlanet ? scale * 1.3 : scale; // Reduced aggressive scaling
     
     return Math.max(body.baseRadius * aggressiveScale, minVisibleSize);
   }, [body.baseRadius, body.radius, cameraDistance]);
@@ -274,11 +275,11 @@ function PlanetMesh({ body, onClick, showLabel, cameraDistance, onOrbitUpdate })
     <group ref={ref}>
       {/* Glow effect for better visibility */}
       <mesh>
-        <sphereGeometry args={[scaledRadius * 1.2, 16, 16]} />
+        <sphereGeometry args={[scaledRadius * 1.15, 16, 16]} /> {/* Reduced glow size */}
         <meshBasicMaterial 
           color={body.glowColor} 
           transparent 
-          opacity={0.3}
+          opacity={0.25} // Reduced opacity
           blending={THREE.AdditiveBlending}
         />
       </mesh>
@@ -303,15 +304,15 @@ function PlanetMesh({ body, onClick, showLabel, cameraDistance, onOrbitUpdate })
       {/* Enhanced label with distance-based sizing */}
       {showLabel && (
         <Html 
-          distanceFactor={15} 
-          position={[0, scaledRadius + 0.5, 0]} 
+          distanceFactor={20} // Increased for better visibility in closer system
+          position={[0, scaledRadius + 0.3, 0]} // Reduced offset
           center
           style={{
-            transform: `scale(${Math.min(1, 50 / (cameraDistance || 50))})`,
+            transform: `scale(${Math.min(1, 40 / (cameraDistance || 40))})`, // Adjusted scaling
             transition: 'transform 0.1s'
           }}
         >
-          <div className="bg-black bg-opacity-80 text-white text-sm px-3 py-1 rounded-lg border border-gray-500 font-semibold shadow-lg">
+          <div className="bg-black bg-opacity-80 text-white text-xs px-2 py-1 rounded-lg border border-gray-500 font-semibold shadow-lg">
             {body.name}
           </div>
         </Html>
@@ -328,7 +329,7 @@ function EllipseLine({ body, bodies, cameraDistance, forceUpdate }) {
   // Dynamic line width based on camera distance
   const material = useMemo(() => new THREE.LineBasicMaterial({ 
     color: body.glowColor || body.color, 
-    opacity: Math.min(0.8, 0.3 + (cameraDistance / 500)),
+    opacity: Math.min(0.7, 0.4 + (cameraDistance / 400)), // Adjusted for closer system
     transparent: true,
   }), [body.color, body.glowColor, cameraDistance]);
 
@@ -432,7 +433,7 @@ function PhysicsRunner({ bodiesRef, running, timeScale, setBodies, collisionEnab
 }
 
 /* ---------- Main Enhanced Component ---------- */
-export default function EnhancedSolarSystem() {
+export default function CompressedSolarSystem() {
   const [bodies, setBodies] = useState(() => defaultBodies());
   const bodiesRef = useRef(bodies);
   bodiesRef.current = bodies;
@@ -482,7 +483,7 @@ export default function EnhancedSolarSystem() {
 
   function addPlanet() {
     const id = `p_${Math.random().toString(36).slice(2, 8)}`;
-    const a = (4 + Math.random() * 10) * AU;
+    const a = (2 + Math.random() * 4) * AU; // Adjusted for compressed system
     const e = Math.random() * 0.05;
     const i = (Math.random() - 0.5) * 0.1;
     const omega = Math.random() * Math.PI * 2;
@@ -495,8 +496,8 @@ export default function EnhancedSolarSystem() {
       id,
       name: `Planet${bodies.length}`,
       mass,
-      radius: 0.5 + Math.random() * 0.6,
-      baseRadius: 0.5 + Math.random() * 0.6,
+      radius: 0.4 + Math.random() * 0.5, // Adjusted for compressed system
+      baseRadius: 0.4 + Math.random() * 0.5,
       color: `hsl(${Math.random() * 360}, 70%, 65%)`,
       glowColor: `hsl(${Math.random() * 360}, 80%, 75%)`,
       position,
@@ -524,22 +525,22 @@ export default function EnhancedSolarSystem() {
       <div className="w-3/4 h-full bg-black relative">
         <Canvas 
           style={{ background: bgColor }} 
-          camera={{ position: [0, 60, 120], fov: 45 }}
+          camera={{ position: [0, 40, 80], fov: 45 }} // Closer initial camera
           shadows
         >
           <color attach="background" args={[bgColor]} />
-          <fog attach="fog" args={[bgColor, 100, 400]} />
+          {/* Fog removed for clearer zooming out */}
           
           <ambientLight intensity={0.5} />
           <directionalLight 
-            position={[50, 80, 50]} 
+            position={[30, 50, 30]} // Adjusted for compressed system
             intensity={1.2} 
             castShadow
           />
           <pointLight 
             position={[0, 0, 0]} 
             intensity={2.5} 
-            distance={300} 
+            distance={200} // Reduced distance
             decay={1.5} 
             color="#ffaa33"
           />
@@ -570,8 +571,8 @@ export default function EnhancedSolarSystem() {
           <OrbitControls 
             enablePan 
             enableZoom 
-            minDistance={15}
-            maxDistance={1000}
+            minDistance={10} // Reduced minimum distance
+            maxDistance={500} // Reduced maximum distance
             target={[0, 0, 0]}
           />
           
@@ -595,9 +596,9 @@ export default function EnhancedSolarSystem() {
       </div>
 
       <div className="w-1/4 h-full bg-gray-900 text-white p-4 overflow-auto border-l border-gray-700">
-        <h2 className="text-xl font-bold mb-3 text-yellow-200">Solar System Simulator</h2>
+        <h2 className="text-xl font-bold mb-3 text-yellow-200">Compressed Solar System</h2>
         <div className="mb-3 text-sm text-gray-300 bg-gray-800 p-2 rounded">
-          Orbital paths update in real-time with mass and radius changes.
+          Planets are closer together but maintain relative sizes. Fog removed for clear viewing.
         </div>
 
         <div className="mb-4 flex flex-wrap gap-2">
@@ -690,28 +691,6 @@ export default function EnhancedSolarSystem() {
                   className="w-full accent-orange-500"
                 />
               </div>
-              <div>
-                <label className="block text-xs text-gray-400 mb-2">Velocity Components</label>
-                <div className="space-y-2">
-                  {['x', 'y', 'z'].map(axis => (
-                    <div key={axis} className="flex items-center space-x-2">
-                      <span className="text-xs w-6 font-medium text-gray-400">{axis.toUpperCase()}:</span>
-                      <input 
-                        type="range" 
-                        min="-10" 
-                        max="10" 
-                        step="0.01" 
-                        value={selected.velocity[axis].toFixed(2)} 
-                        onChange={(e) => updateVelocity(axis, e.target.value)} 
-                        className="flex-1 accent-blue-400"
-                      />
-                      <span className="text-xs w-12 text-right font-mono">
-                        {selected.velocity[axis].toFixed(2)}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              </div>
             </div>
           </div>
         )}
@@ -751,19 +730,6 @@ export default function EnhancedSolarSystem() {
             ))}
           </div>
         </div>
-
-        {log.length > 0 && (
-          <div className="mt-6">
-            <h3 className="font-bold mb-2 text-yellow-200">Event Log</h3>
-            <div className="text-xs max-h-32 overflow-y-auto space-y-1 bg-gray-800 p-2 rounded">
-              {log.map((entry, i) => (
-                <div key={i} className="p-2 border-b border-gray-700 last:border-0 font-mono">
-                  {entry}
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
       </div>
     </div>
   );
