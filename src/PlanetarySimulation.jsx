@@ -4,7 +4,7 @@ import { OrbitControls, Html } from "@react-three/drei";
 import * as THREE from "three";
 
 /*
-  Improved predictive ellipse generator with enhanced visibility at all zoom levels
+  Improved predictive ellipse generator with proper mass-radius relationship
 */
 const v3 = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
 
@@ -49,7 +49,7 @@ function orbitalElementsToState(a, e, i, omega, Omega, nu, mu) {
   return { position: pos, velocity: vel };
 }
 
-// Enhanced default bodies with better visibility scaling
+// Enhanced default bodies with better Mercury positioning
 function defaultBodies() {
   const sun = {
     id: "sun",
@@ -67,28 +67,34 @@ function defaultBodies() {
   };
 
   const defs = [
-    ["Mercury", 0.055, 0.6, 0.45, 0.205, 7.0, "#b8a17a", "#d4c4a8"],
-    ["Venus", 0.815, 1.1, 0.75, 0.007, 3.39, "#e6d5b8", "#f5e9d5"],
-    ["Earth", 1.0, 1.2, 1.0, 0.017, 0.0, "#6bb5ff", "#a3d1ff"],
-    ["Mars", 0.107, 0.8, 1.6, 0.094, 1.85, "#ff8c69", "#ffb5a3"],
-    ["Jupiter", 317.8, 2.4, 5.5, 0.049, 1.305, "#e0b580", "#f0d9b5"],
-    ["Saturn", 95.2, 2.1, 9.8, 0.056, 2.485, "#f0d9a4", "#f8ecca"],
-    ["Uranus", 14.5, 1.6, 19.5, 0.047, 0.773, "#c6f7ff", "#e3fbff"],
-    ["Neptune", 17.15, 1.6, 30.5, 0.009, 1.77, "#6b9fff", "#a3c2ff"],
+    // Mercury: increased distance and adjusted true anomaly to avoid sun intersection
+    ["Mercury", 0.055, 0.6, 0.55, 0.205, 7.0, "#b8a17a", "#d4c4a8", Math.PI * 0.7], // Added initial true anomaly
+    ["Venus", 0.815, 1.1, 0.75, 0.007, 3.39, "#e6d5b8", "#f5e9d5", Math.PI * 0.3],
+    ["Earth", 1.0, 1.2, 1.0, 0.017, 0.0, "#6bb5ff", "#a3d1ff", Math.PI * 0.5],
+    ["Mars", 0.107, 0.8, 1.6, 0.094, 1.85, "#ff8c69", "#ffb5a3", Math.PI * 0.8],
+    ["Jupiter", 317.8, 2.4, 5.5, 0.049, 1.305, "#e0b580", "#f0d9b5", Math.PI * 0.2],
+    ["Saturn", 95.2, 2.1, 9.8, 0.056, 2.485, "#f0d9a4", "#f8ecca", Math.PI * 0.6],
+    ["Uranus", 14.5, 1.6, 19.5, 0.047, 0.773, "#c6f7ff", "#e3fbff", Math.PI * 0.4],
+    ["Neptune", 17.15, 1.6, 30.5, 0.009, 1.77, "#6b9fff", "#a3c2ff", Math.PI * 0.9],
   ];
 
   const bodies = [sun];
   for (let idx = 0; idx < defs.length; idx++) {
-    const [name, massRel, radiusRel, aAU, e, incDeg, color, glowColor] = defs[idx];
+    const [name, massRel, radiusRel, aAU, e, incDeg, color, glowColor, initialNu] = defs[idx];
     const a = aAU * AU;
     const i = (incDeg * Math.PI) / 180;
     const omega = (Math.random() - 0.5) * 0.4;
     const Omega = (Math.random() - 0.5) * 0.4;
-    const nu = Math.random() * Math.PI * 2;
+    const nu = initialNu || Math.random() * Math.PI * 2; // Use provided initial anomaly or random
     const mass = massRel;
     const mu = G * (SUN_MASS + mass);
     const { position: posOrb, velocity: velOrb } = orbitalElementsToState(a, e, i, omega, Omega, nu, mu);
     const kepler = { a, e, i, omega, Omega, nu0: nu };
+    
+    // Calculate periapsis distance to ensure it doesn't intersect the sun
+    const periapsis = a * (1 - e);
+    const sunRadius = sun.radius;
+    
     bodies.push({
       id: name.toLowerCase(),
       name,
@@ -103,6 +109,7 @@ function defaultBodies() {
       kepler,
       fixed: false,
       importance: 8 - idx * 0.5,
+      orbitalElements: { a, e, i, omega, Omega, nu }, // Store for path calculation
     });
   }
 
@@ -138,7 +145,7 @@ function computeAccelerations(bodies) {
   return accs;
 }
 
-/* ---------- Enhanced predictive ellipse generator ---------- */
+/* ---------- Enhanced predictive ellipse generator with mass consideration ---------- */
 function computeEllipsePointsFromState(body, bodies, steps = 300) {
   const sun = bodies.find((b) => b.id === "sun");
   if (!sun) return [];
@@ -150,7 +157,9 @@ function computeEllipsePointsFromState(body, bodies, steps = 300) {
   const v2 = vVec.lengthSq();
   if (r < 1e-6 || !isFinite(r) || !isFinite(v2)) return [];
 
+  // Include both sun mass AND body mass in gravitational parameter
   const mu = G * (sun.mass + body.mass);
+
   const h = new THREE.Vector3().crossVectors(rVec, vVec);
   const hNorm = h.length();
   if (hNorm < 1e-8) return [];
@@ -168,6 +177,33 @@ function computeEllipsePointsFromState(body, bodies, steps = 300) {
 
   const p = a * (1 - e * e);
   if (!(p > 0)) return [];
+
+  // Calculate periapsis distance and ensure it clears the sun
+  const periapsis = a * (1 - e);
+  const minSafeDistance = sun.radius + body.radius + 2.0; // Safe margin
+  
+  if (periapsis < minSafeDistance) {
+    // Adjust the ellipse points to ensure they don't intersect the sun
+    const unitE = eVec.clone().normalize();
+    const unitH = h.clone().normalize();
+    const unitPerp = new THREE.Vector3().crossVectors(unitH, unitE).normalize();
+    if (unitPerp.length() < 1e-8) return [];
+
+    const pts = [];
+    for (let k = 0; k <= steps; k++) {
+      const theta = (k / steps) * Math.PI * 2;
+      let rTheta = p / (1 + e * Math.cos(theta));
+      
+      // Ensure minimum safe distance from sun
+      rTheta = Math.max(rTheta, minSafeDistance);
+      
+      const pos = unitE.clone().multiplyScalar(rTheta * Math.cos(theta))
+        .add(unitPerp.clone().multiplyScalar(rTheta * Math.sin(theta)));
+      const worldPos = pos.add(sun.position.clone());
+      pts.push(worldPos);
+    }
+    return pts;
+  }
 
   const unitE = eVec.clone().normalize();
   const unitH = h.clone().normalize();
@@ -200,7 +236,7 @@ function CameraTracker({ onDistanceChange }) {
 }
 
 /* ---------- Enhanced Planet Component with Dynamic Scaling ---------- */
-function PlanetMesh({ body, onClick, showLabel, cameraDistance }) {
+function PlanetMesh({ body, onClick, showLabel, cameraDistance, onOrbitUpdate }) {
   const ref = useRef();
   const meshRef = useRef();
   
@@ -208,13 +244,11 @@ function PlanetMesh({ body, onClick, showLabel, cameraDistance }) {
   const scaledRadius = useMemo(() => {
     if (!cameraDistance) return body.radius;
     
-    // Scale planets to remain visible when zoomed out
     const baseScale = 1.0;
     const distanceFactor = Math.min(1, cameraDistance / 200);
     const minVisibleSize = 0.8;
     const scale = baseScale + (distanceFactor * 2);
     
-    // Inner planets scale more aggressively
     const isInnerPlanet = body.baseRadius < 1.0;
     const aggressiveScale = isInnerPlanet ? scale * 1.5 : scale;
     
@@ -225,10 +259,14 @@ function PlanetMesh({ body, onClick, showLabel, cameraDistance }) {
     if (!ref.current) return;
     ref.current.position.copy(body.position);
     
-    // Apply dynamic scaling
     if (meshRef.current) {
       const scale = scaledRadius / body.baseRadius;
       meshRef.current.scale.setScalar(scale);
+    }
+    
+    // Notify parent that planet position updated (for orbit recalculation)
+    if (onOrbitUpdate) {
+      onOrbitUpdate();
     }
   });
 
@@ -282,8 +320,8 @@ function PlanetMesh({ body, onClick, showLabel, cameraDistance }) {
   );
 }
 
-/* ---------- Enhanced Ellipse Lines ---------- */
-function EllipseLine({ body, bodies, cameraDistance }) {
+/* ---------- Enhanced Ellipse Lines with Dynamic Updates ---------- */
+function EllipseLine({ body, bodies, cameraDistance, forceUpdate }) {
   const ref = useRef();
   const [geometry] = useState(() => new THREE.BufferGeometry());
   
@@ -294,28 +332,33 @@ function EllipseLine({ body, bodies, cameraDistance }) {
     transparent: true,
   }), [body.color, body.glowColor, cameraDistance]);
 
-  useEffect(() => {
-    updateEllipseGeometry();
+  // Update ellipse geometry when body properties change
+  const updateEllipseGeometry = useMemo(() => {
+    return () => {
+      if (!ref.current) return;
+      const pts = computeEllipsePointsFromState(body, bodies, 300);
+      if (pts.length < 2) return;
+      const positions = new Float32Array(pts.flatMap(p => [p.x, p.y, p.z]));
+      geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
+      geometry.attributes.position.needsUpdate = true;
+    };
   }, [body, bodies, geometry]);
 
+  // Update on initial mount and when forceUpdate changes
+  useEffect(() => {
+    updateEllipseGeometry();
+  }, [updateEllipseGeometry, forceUpdate]);
+
+  // Update every frame to ensure paths stay current
   useFrame(() => {
     updateEllipseGeometry();
   });
-
-  const updateEllipseGeometry = () => {
-    if (!ref.current) return;
-    const pts = computeEllipsePointsFromState(body, bodies, 300);
-    if (pts.length < 2) return;
-    const positions = new Float32Array(pts.flatMap(p => [p.x, p.y, p.z]));
-    geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
-    geometry.attributes.position.needsUpdate = true;
-  };
 
   return <line ref={ref} geometry={geometry} material={material} />;
 }
 
 /* ---------- Physics Runner Component ---------- */
-function PhysicsRunner({ bodiesRef, running, timeScale, setBodies, collisionEnabled, setLog }) {
+function PhysicsRunner({ bodiesRef, running, timeScale, setBodies, collisionEnabled, setLog, onPhysicsUpdate }) {
   const last = useRef(performance.now());
   
   useFrame(() => {
@@ -378,6 +421,11 @@ function PhysicsRunner({ bodiesRef, running, timeScale, setBodies, collisionEnab
 
     const newBodies = local.map(lb => ({ ...lb, position: lb.position, velocity: lb.velocity }));
     setBodies(newBodies);
+    
+    // Notify about physics update for orbit recalculations
+    if (onPhysicsUpdate) {
+      onPhysicsUpdate();
+    }
   });
   
   return null;
@@ -396,20 +444,28 @@ export default function EnhancedSolarSystem() {
   const [collisionEnabled, setCollisionEnabled] = useState(false);
   const [log, setLog] = useState([]);
   const [cameraDistance, setCameraDistance] = useState(0);
+  const [orbitUpdateTrigger, setOrbitUpdateTrigger] = useState(0);
 
   const selected = bodies.find(b => b.id === selectedId) || null;
 
-  // UI setters
+  // Force orbit updates when properties change
+  const triggerOrbitUpdate = () => {
+    setOrbitUpdateTrigger(prev => prev + 1);
+  };
+
+  // UI setters with orbit update triggering
   const updateMass = (val) => { 
     if (!selected) return; 
     const m = parseFloat(val); 
     setBodies(prev => prev.map(b => b.id === selected.id ? { ...b, mass: m } : b)); 
+    triggerOrbitUpdate();
   };
   
   const updateRadius = (val) => { 
     if (!selected) return; 
     const r = parseFloat(val); 
     setBodies(prev => prev.map(b => b.id === selected.id ? { ...b, radius: r, baseRadius: r } : b)); 
+    triggerOrbitUpdate();
   };
   
   const updateVelocity = (axis, val) => {
@@ -421,6 +477,7 @@ export default function EnhancedSolarSystem() {
       nv[axis] = v;
       return { ...b, velocity: nv };
     }));
+    triggerOrbitUpdate();
   };
 
   function addPlanet() {
@@ -447,14 +504,17 @@ export default function EnhancedSolarSystem() {
       kepler: { a, e, i, omega, Omega, nu0: nu },
       fixed: false,
       importance: 5,
+      orbitalElements: { a, e, i, omega, Omega, nu },
     };
     setBodies(prev => [...prev, p]);
+    triggerOrbitUpdate();
   }
 
   function reset() {
     setBodies(defaultBodies());
     setLog([]);
     setSelectedId(null);
+    triggerOrbitUpdate();
   }
 
   const bgColor = "#000011";
@@ -484,17 +544,18 @@ export default function EnhancedSolarSystem() {
             color="#ffaa33"
           />
 
-          {/* Enhanced orbital paths */}
+          {/* Enhanced orbital paths with force update trigger */}
           {showEllipses && bodies.map(b => b.id !== "sun" ? 
             <EllipseLine 
               key={`ell_${b.id}`} 
               body={b} 
               bodies={bodies}
               cameraDistance={cameraDistance}
+              forceUpdate={orbitUpdateTrigger}
             /> 
           : null)}
 
-          {/* Enhanced planets with dynamic scaling */}
+          {/* Enhanced planets with dynamic scaling and orbit updates */}
           {bodies.map(b => (
             <PlanetMesh 
               key={b.id} 
@@ -502,6 +563,7 @@ export default function EnhancedSolarSystem() {
               onClick={() => setSelectedId(b.id)} 
               showLabel={true}
               cameraDistance={cameraDistance}
+              onOrbitUpdate={triggerOrbitUpdate}
             />
           ))}
 
@@ -520,6 +582,7 @@ export default function EnhancedSolarSystem() {
             setBodies={setBodies}
             collisionEnabled={collisionEnabled}
             setLog={setLog}
+            onPhysicsUpdate={triggerOrbitUpdate}
           />
           
           <CameraTracker onDistanceChange={setCameraDistance} />
@@ -534,7 +597,7 @@ export default function EnhancedSolarSystem() {
       <div className="w-1/4 h-full bg-gray-900 text-white p-4 overflow-auto border-l border-gray-700">
         <h2 className="text-xl font-bold mb-3 text-yellow-200">Solar System Simulator</h2>
         <div className="mb-3 text-sm text-gray-300 bg-gray-800 p-2 rounded">
-          Planets automatically scale when zoomed out for better visibility.
+          Orbital paths update in real-time with mass and radius changes.
         </div>
 
         <div className="mb-4 flex flex-wrap gap-2">
@@ -600,6 +663,7 @@ export default function EnhancedSolarSystem() {
               <div>
                 <label className="block text-xs text-gray-400 mb-1">
                   Mass: <span className="text-white font-medium">{selected.mass.toFixed(3)}</span>
+                  <br /><span className="text-xs text-gray-500">(Affects orbital path)</span>
                 </label>
                 <input 
                   type="range" 
@@ -613,7 +677,8 @@ export default function EnhancedSolarSystem() {
               </div>
               <div>
                 <label className="block text-xs text-gray-400 mb-1">
-                  Base Radius: <span className="text-white font-medium">{selected.radius.toFixed(2)}</span>
+                  Radius: <span className="text-white font-medium">{selected.radius.toFixed(2)}</span>
+                  <br /><span className="text-xs text-gray-500">(Affects safe orbital distance)</span>
                 </label>
                 <input 
                   type="range" 
@@ -624,6 +689,28 @@ export default function EnhancedSolarSystem() {
                   onChange={(e) => updateRadius(e.target.value)} 
                   className="w-full accent-orange-500"
                 />
+              </div>
+              <div>
+                <label className="block text-xs text-gray-400 mb-2">Velocity Components</label>
+                <div className="space-y-2">
+                  {['x', 'y', 'z'].map(axis => (
+                    <div key={axis} className="flex items-center space-x-2">
+                      <span className="text-xs w-6 font-medium text-gray-400">{axis.toUpperCase()}:</span>
+                      <input 
+                        type="range" 
+                        min="-10" 
+                        max="10" 
+                        step="0.01" 
+                        value={selected.velocity[axis].toFixed(2)} 
+                        onChange={(e) => updateVelocity(axis, e.target.value)} 
+                        className="flex-1 accent-blue-400"
+                      />
+                      <span className="text-xs w-12 text-right font-mono">
+                        {selected.velocity[axis].toFixed(2)}
+                      </span>
+                    </div>
+                  ))}
+                </div>
               </div>
             </div>
           </div>
