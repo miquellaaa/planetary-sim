@@ -69,14 +69,14 @@ function defaultBodies() {
   // Original planet spacing but with increased distances from sun
   const defs = [
     // [name, massRel, radiusRel, aAU, e, incDeg, color, glowColor, initialNu]
-    ["Mercury", 0.055, 0.6, 0.6, 0.205, 7.0, "#b8a17a", "#d4c4a8", Math.PI * 0.7],    // Increased from 0.45 to 0.6 AU
-    ["Venus", 0.815, 1.1, 0.85, 0.007, 3.39, "#e6d5b8", "#f5e9d5", Math.PI * 0.3],    // Increased from 0.75 to 0.85 AU
-    ["Earth", 1.0, 1.2, 1.1, 0.017, 0.0, "#6bb5ff", "#a3d1ff", Math.PI * 0.5],        // Increased from 1.0 to 1.1 AU
-    ["Mars", 0.107, 0.8, 1.7, 0.094, 1.85, "#ff8c69", "#ffb5a3", Math.PI * 0.8],      // Slight increase from 1.6 to 1.7 AU
-    ["Jupiter", 317.8, 2.4, 5.5, 0.049, 1.305, "#e0b580", "#f0d9b5", Math.PI * 0.2],  // Original 5.5 AU
+    ["Mercury", 0.055, 0.6, 0.9, 0.205, 7.0, "#b8a17a", "#d4c4a8", Math.PI * 0.7],    // Increased from 0.45 to 0.6 AU
+    ["Venus", 0.815, 1.1, 1.15, 0.007, 3.39, "#e6d5b8", "#f5e9d5", Math.PI * 0.3],    // Increased from 0.75 to 0.85 AU
+    ["Earth", 1.0, 1.2, 1.3, 0.017, 0.0, "#6bb5ff", "#a3d1ff", Math.PI * 0.5],        // Increased from 1.0 to 1.1 AU
+    ["Mars", 0.107, 0.8, 2.0, 0.094, 1.85, "#ff8c69", "#ffb5a3", Math.PI * 0.8],      // Slight increase from 1.6 to 1.7 AU
+    ["Jupiter", 317.8, 2.8, 5.5, 0.049, 1.305, "#e0b580", "#f0d9b5", Math.PI * 0.2],  // Original 5.5 AU
     ["Saturn", 95.2, 2.1, 9.8, 0.056, 2.485, "#f0d9a4", "#f8ecca", Math.PI * 0.6],    // Original 9.8 AU
-    ["Uranus", 14.5, 1.6, 19.5, 0.047, 0.773, "#c6f7ff", "#e3fbff", Math.PI * 0.4],   // Original 19.5 AU
-    ["Neptune", 17.15, 1.6, 30.5, 0.009, 1.77, "#6b9fff", "#a3c2ff", Math.PI * 0.9],  // Original 30.5 AU
+    ["Uranus", 14.5, 1.6, 16.5, 0.047, 0.773, "#c6f7ff", "#e3fbff", Math.PI * 0.4],   // Original 19.5 AU
+    ["Neptune", 17.15, 1.6, 24.5, 0.009, 1.77, "#6b9fff", "#a3c2ff", Math.PI * 0.9],  // Original 30.5 AU
   ];
 
   const bodies = [sun];
