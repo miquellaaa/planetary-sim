@@ -4,7 +4,7 @@ import { OrbitControls, Html } from "@react-three/drei";
 import * as THREE from "three";
 
 /*
-  Solar system with realistic planetary collisions
+  Solar system simulation
 */
 const v3 = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
 
@@ -239,7 +239,7 @@ function handleCatastrophicDisruption(A, B, comVelocity, setLog, bodies, setBodi
     });
   }
   
-  setLog(L => [`💥 CATASTROPHIC IMPACT: ${A.name} and ${B.name} destroyed each other!`, ...L.slice(0, 8)]);
+  setLog(L => [`CATASTROPHIC IMPACT: ${A.name} and ${B.name} destroyed each other`, ...L.slice(0, 8)]);
   
   // Remove original planets and add fragments
   setBodies(prev => [
@@ -298,7 +298,7 @@ function handleGrazingImpact(A, B, comVelocity, normal, setLog, bodies, setBodie
     velocity: comVelocity.clone().multiplyScalar(0.98), // Slight velocity damping
   };
   
-  setLog(L => [`🌍 GRAZING IMPACT: ${smaller.name} hit ${larger.name}, creating a moon!`, ...L.slice(0, 8)]);
+  setLog(L => [`GRAZING IMPACT: ${smaller.name} hit ${larger.name}, creating a moon`, ...L.slice(0, 8)]);
   
   // Replace bodies
   setBodies(prev => [
@@ -339,7 +339,7 @@ function handlePlanetaryMerger(A, B, comVelocity, setLog, bodies, setBodies) {
     importance: Math.max(A.importance, B.importance),
   };
   
-  setLog(L => [`🪐 PLANETARY MERGER: ${A.name} and ${B.name} merged into ${mergedName}!`, ...L.slice(0, 8)]);
+  setLog(L => [`PLANETARY MERGER: ${A.name} and ${B.name} merged into ${mergedName}`, ...L.slice(0, 8)]);
   
   // Replace colliding planets with merged planet
   setBodies(prev => [
@@ -764,9 +764,9 @@ export default function RealisticCollisionSolarSystem() {
       </div>
 
       <div className="w-1/4 h-full bg-gray-900 text-white p-4 overflow-auto border-l border-gray-700">
-        <h2 className="text-xl font-bold mb-3 text-yellow-200">Realistic Collision Solar System</h2>
+        <h2 className="text-xl font-bold mb-3 text-yellow-200">Solar System Simulator</h2>
         <div className="mb-3 text-sm text-gray-300 bg-gray-800 p-2 rounded">
-          Collisions now create moons, merge planets, or cause catastrophic disruptions based on real astrophysics!
+          Kramer Please Give Us an A
         </div>
 
         <div className="mb-4 flex flex-wrap gap-2">
