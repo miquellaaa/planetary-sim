@@ -4,12 +4,12 @@ import { OrbitControls, Html } from "@react-three/drei";
 import * as THREE from "three";
 
 /*
-  Solar system with completely revised scaling to prevent orbit overlaps
+  Solar system with realistic planetary collisions
 */
 const v3 = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
 
 const G = 0.12;
-const AU = 10; // Reduced AU for better visual spacing
+const AU = 10;
 const SUN_MASS = 10000;
 
 // Convert orbital elements -> Cartesian
@@ -55,7 +55,7 @@ function defaultBodies() {
     id: "sun",
     name: "Sun",
     mass: SUN_MASS,
-    radius: 2.5, // Smaller sun for better scale
+    radius: 2.5,
     baseRadius: 2.5,
     color: "#ffaa33",
     glowColor: "#ff6600",
@@ -66,39 +66,35 @@ function defaultBodies() {
     importance: 10,
   };
 
-  // Completely revised orbital distances with clear spacing
   const defs = [
-    // [name, massRel, radiusRel, aAU, e, incDeg, color, glowColor, initialNu]
-    ["Mercury", 0.055, 0.4, 1.0, 0.1, 7.0, "#b8a17a", "#d4c4a8", Math.PI * 0.7],     // Reduced eccentricity
-    ["Venus", 0.815, 0.9, 1.8, 0.01, 3.39, "#e6d5b8", "#f5e9d5", Math.PI * 0.3],    // Very low eccentricity
-    ["Earth", 1.0, 1.0, 2.6, 0.02, 0.0, "#6bb5ff", "#a3d1ff", Math.PI * 0.5],        // Low eccentricity
-    ["Mars", 0.107, 0.6, 3.4, 0.05, 1.85, "#ff8c69", "#ffb5a3", Math.PI * 0.8],      // Moderate spacing
-    ["Jupiter", 317.8, 1.8, 5.0, 0.03, 1.305, "#e0b580", "#f0d9b5", Math.PI * 0.2],  // Significant gap
-    ["Saturn", 95.2, 1.6, 6.8, 0.04, 2.485, "#f0d9a4", "#f8ecca", Math.PI * 0.6],    // Clear separation
-    ["Uranus", 14.5, 1.2, 8.6, 0.02, 0.773, "#c6f7ff", "#e3fbff", Math.PI * 0.4],    // Wide gap
-    ["Neptune", 17.15, 1.2, 10.4, 0.01, 1.77, "#6b9fff", "#a3c2ff", Math.PI * 0.9],  // Final clear spacing
+    ["Mercury", 0.055, 0.4, 1.0, 0.1, 7.0, "#b8a17a", "#d4c4a8", Math.PI * 0.7],
+    ["Venus", 0.815, 0.9, 1.8, 0.01, 3.39, "#e6d5b8", "#f5e9d5", Math.PI * 0.3],
+    ["Earth", 1.0, 1.0, 2.6, 0.02, 0.0, "#6bb5ff", "#a3d1ff", Math.PI * 0.5],
+    ["Mars", 0.107, 0.6, 3.4, 0.05, 1.85, "#ff8c69", "#ffb5a3", Math.PI * 0.8],
+    ["Jupiter", 317.8, 1.8, 5.0, 0.03, 1.305, "#e0b580", "#f0d9b5", Math.PI * 0.2],
+    ["Saturn", 95.2, 1.6, 6.8, 0.04, 2.485, "#f0d9a4", "#f8ecca", Math.PI * 0.6],
+    ["Uranus", 14.5, 1.2, 8.6, 0.02, 0.773, "#c6f7ff", "#e3fbff", Math.PI * 0.4],
+    ["Neptune", 17.15, 1.2, 10.4, 0.01, 1.77, "#6b9fff", "#a3c2ff", Math.PI * 0.9],
   ];
 
   const bodies = [sun];
   
-  // Calculate minimum safe distances between orbits
-  const orbitSpacing = 1.2; // Minimum spacing multiplier between orbits
+  const orbitSpacing = 1.2;
   
   for (let idx = 0; idx < defs.length; idx++) {
     const [name, massRel, radiusRel, aAU, e, incDeg, color, glowColor, initialNu] = defs[idx];
     
-    // Ensure minimum distance from previous orbit
     let a = aAU * AU;
     if (idx > 0) {
-      const prevBody = bodies[idx]; // Previous planet (index matches since sun is first)
-      const prevA = prevBody.orbitalElements.a / AU; // Get previous semi-major axis in AU
+      const prevBody = bodies[idx];
+      const prevA = prevBody.orbitalElements.a / AU;
       const minDistance = (prevA * (1 + prevBody.orbitalElements.e) + 0.3) * orbitSpacing;
       a = Math.max(a, minDistance * AU);
     }
     
     const i = (incDeg * Math.PI) / 180;
-    const omega = (Math.random() - 0.5) * 0.3; // Reduced variation
-    const Omega = (Math.random() - 0.5) * 0.3; // Reduced variation
+    const omega = (Math.random() - 0.5) * 0.3;
+    const Omega = (Math.random() - 0.5) * 0.3;
     const nu = initialNu || Math.random() * Math.PI * 2;
     const mass = massRel;
     const mu = G * (SUN_MASS + mass);
@@ -108,7 +104,7 @@ function defaultBodies() {
       id: name.toLowerCase(),
       name,
       mass,
-      radius: Math.max(0.2, radiusRel * 0.15), // Reduced planet sizes for better scale
+      radius: Math.max(0.2, radiusRel * 0.15),
       baseRadius: Math.max(0.2, radiusRel * 0.15),
       color,
       glowColor: glowColor || color,
@@ -122,7 +118,6 @@ function defaultBodies() {
     });
   }
 
-  // zero net momentum
   let totalMass = 0; 
   let totalMomentum = v3(0, 0, 0);
   for (const b of bodies) { 
@@ -154,7 +149,206 @@ function computeAccelerations(bodies) {
   return accs;
 }
 
-/* ---------- Enhanced predictive ellipse generator with overlap prevention ---------- */
+/* ---------- REALISTIC PLANETARY COLLISION SYSTEM ---------- */
+
+function handleRealisticCollision(A, B, setLog, bodies, setBodies) {
+  const collisionDistance = A.radius + B.radius;
+  const actualDistance = A.position.distanceTo(B.position);
+  
+  if (actualDistance > collisionDistance * 0.8) return false;
+
+  // Calculate relative velocity
+  const relVelocity = new THREE.Vector3().subVectors(A.velocity, B.velocity);
+  const normal = new THREE.Vector3().subVectors(B.position, A.position).normalize();
+  const approachSpeed = -relVelocity.dot(normal); // Negative because we want approach
+  
+  // Only collide if planets are moving toward each other
+  if (approachSpeed <= 0) return false;
+
+  const m1 = A.mass;
+  const m2 = B.mass;
+  const totalMass = m1 + m2;
+
+  // Calculate center of mass velocity
+  const comVelocity = new THREE.Vector3()
+    .add(A.velocity.clone().multiplyScalar(m1))
+    .add(B.velocity.clone().multiplyScalar(m2))
+    .multiplyScalar(1 / totalMass);
+
+  // Calculate impact energy (kinetic energy in center of mass frame)
+  const v1Rel = new THREE.Vector3().subVectors(A.velocity, comVelocity);
+  const v2Rel = new THREE.Vector3().subVectors(B.velocity, comVelocity);
+  const impactEnergy = 0.5 * m1 * v1Rel.lengthSq() + 0.5 * m2 * v2Rel.lengthSq();
+
+  // Calculate escape velocity for the combined mass at contact distance
+  const combinedRadius = A.radius + B.radius;
+  const escapeVelocity = Math.sqrt(2 * G * totalMass / combinedRadius);
+
+  // Determine collision type based on impact energy vs gravitational binding energy
+  const bindingEnergy = G * m1 * m2 / combinedRadius;
+  const impactParameter = actualDistance / combinedRadius;
+
+  if (impactEnergy > 2 * bindingEnergy && approachSpeed > escapeVelocity * 0.7) {
+    // HIGH-ENERGY COLLISION: Catastrophic disruption (like Theia-Earth impact)
+    handleCatastrophicDisruption(A, B, comVelocity, setLog, bodies, setBodies);
+  } else if (impactEnergy > bindingEnergy * 0.5) {
+    // MEDIUM-ENERGY COLLISION: Grazing impact with mass exchange
+    handleGrazingImpact(A, B, comVelocity, normal, setLog, bodies, setBodies);
+  } else {
+    // LOW-ENERGY COLLISION: Accretion or merger
+    handlePlanetaryMerger(A, B, comVelocity, setLog, bodies, setBodies);
+  }
+
+  return true;
+}
+
+function handleCatastrophicDisruption(A, B, comVelocity, setLog, bodies, setBodies) {
+  const totalMass = A.mass + B.radius;
+  
+  // Create multiple fragments
+  const fragmentCount = 3 + Math.floor(Math.random() * 4);
+  const fragments = [];
+  
+  for (let i = 0; i < fragmentCount; i++) {
+    const fragmentMass = totalMass * (0.1 + Math.random() * 0.3);
+    const fragmentRadius = Math.pow(fragmentMass, 1/3) * 0.8;
+    
+    // Random velocity kick based on impact energy
+    const velocitySpread = 2 + Math.random() * 4;
+    const randomDir = new THREE.Vector3(
+      Math.random() - 0.5,
+      Math.random() - 0.5,
+      Math.random() - 0.5
+    ).normalize();
+    
+    const fragmentVelocity = comVelocity.clone()
+      .add(randomDir.multiplyScalar(velocitySpread));
+    
+    fragments.push({
+      id: `fragment_${Date.now()}_${i}`,
+      name: `${A.name.split(' ')[0]} Fragment`,
+      mass: fragmentMass,
+      radius: fragmentRadius,
+      baseRadius: fragmentRadius,
+      color: i % 2 === 0 ? A.color : B.color,
+      glowColor: i % 2 === 0 ? A.glowColor : B.glowColor,
+      position: A.position.clone().add(randomDir.multiplyScalar(A.radius + B.radius)),
+      velocity: fragmentVelocity,
+      fixed: false,
+      importance: 3,
+    });
+  }
+  
+  setLog(L => [`💥 CATASTROPHIC IMPACT: ${A.name} and ${B.name} destroyed each other!`, ...L.slice(0, 8)]);
+  
+  // Remove original planets and add fragments
+  setBodies(prev => [
+    ...prev.filter(b => b.id !== A.id && b.id !== B.id),
+    ...fragments
+  ]);
+}
+
+function handleGrazingImpact(A, B, comVelocity, normal, setLog, bodies, setBodies) {
+  const m1 = A.mass;
+  const m2 = B.mass;
+  const totalMass = m1 + m2;
+  
+  // Calculate mass exchange (like the Moon-forming impact)
+  const massTransferRatio = 0.1 + Math.random() * 0.3;
+  const transferredMass = Math.min(m1, m2) * massTransferRatio;
+  
+  // Larger body absorbs most of the mass
+  const larger = m1 > m2 ? A : B;
+  const smaller = m1 > m2 ? B : A;
+  
+  // Update larger body
+  const newLargerMass = larger.mass + transferredMass * 0.7;
+  const newLargerRadius = Math.pow(newLargerMass, 1/3) * 0.9;
+  
+  // Create debris/moon from remaining mass
+  const debrisMass = transferredMass * 0.3;
+  const debrisRadius = Math.pow(debrisMass, 1/3) * 0.7;
+  
+  // Debris gets orbital velocity around larger body
+  const orbitalVelocity = Math.sqrt(G * newLargerMass / (larger.radius + debrisRadius * 2));
+  const perpendicular = new THREE.Vector3(-normal.z, 0, normal.x).normalize();
+  const debrisVelocity = comVelocity.clone()
+    .add(perpendicular.multiplyScalar(orbitalVelocity));
+  
+  const debris = {
+    id: `moon_${Date.now()}`,
+    name: `${larger.name} Moon`,
+    mass: debrisMass,
+    radius: debrisRadius,
+    baseRadius: debrisRadius,
+    color: smaller.color,
+    glowColor: smaller.glowColor,
+    position: larger.position.clone().add(perpendicular.multiplyScalar(larger.radius + debrisRadius + 1)),
+    velocity: debrisVelocity,
+    fixed: false,
+    importance: 4,
+  };
+  
+  // Update larger body
+  const updatedLarger = {
+    ...larger,
+    mass: newLargerMass,
+    radius: newLargerRadius,
+    baseRadius: newLargerRadius,
+    velocity: comVelocity.clone().multiplyScalar(0.98), // Slight velocity damping
+  };
+  
+  setLog(L => [`🌍 GRAZING IMPACT: ${smaller.name} hit ${larger.name}, creating a moon!`, ...L.slice(0, 8)]);
+  
+  // Replace bodies
+  setBodies(prev => [
+    ...prev.filter(b => b.id !== A.id && b.id !== B.id),
+    updatedLarger,
+    debris
+  ]);
+}
+
+function handlePlanetaryMerger(A, B, comVelocity, setLog, bodies, setBodies) {
+  const m1 = A.mass;
+  const m2 = B.mass;
+  const totalMass = m1 + m2;
+  
+  // Create merged planet
+  const mergedRadius = Math.pow(totalMass, 1/3) * 0.9;
+  const mergedName = m1 > m2 ? 
+    `${A.name} (Merged)` : 
+    `${B.name} (Merged)`;
+  
+  // Blend colors
+  const color1 = new THREE.Color(A.color);
+  const color2 = new THREE.Color(B.color);
+  const blendedColor = new THREE.Color();
+  blendedColor.lerpColors(color1, color2, m2 / totalMass);
+  
+  const mergedPlanet = {
+    id: `merged_${Date.now()}`,
+    name: mergedName,
+    mass: totalMass,
+    radius: mergedRadius,
+    baseRadius: mergedRadius,
+    color: `#${blendedColor.getHexString()}`,
+    glowColor: `#${blendedColor.getHexString()}`,
+    position: comVelocity.clone().multiplyScalar(0.1).add(A.position), // Slight position adjustment
+    velocity: comVelocity,
+    fixed: false,
+    importance: Math.max(A.importance, B.importance),
+  };
+  
+  setLog(L => [`🪐 PLANETARY MERGER: ${A.name} and ${B.name} merged into ${mergedName}!`, ...L.slice(0, 8)]);
+  
+  // Replace colliding planets with merged planet
+  setBodies(prev => [
+    ...prev.filter(b => b.id !== A.id && b.id !== B.id),
+    mergedPlanet
+  ]);
+}
+
+/* ---------- Enhanced predictive ellipse generator ---------- */
 function computeEllipsePointsFromState(body, bodies, steps = 300) {
   const sun = bodies.find((b) => b.id === "sun");
   if (!sun) return [];
@@ -166,7 +360,6 @@ function computeEllipsePointsFromState(body, bodies, steps = 300) {
   const v2 = vVec.lengthSq();
   if (r < 1e-6 || !isFinite(r) || !isFinite(v2)) return [];
 
-  // Include both sun mass AND body mass in gravitational parameter
   const mu = G * (sun.mass + body.mass);
 
   const h = new THREE.Vector3().crossVectors(rVec, vVec);
@@ -187,12 +380,10 @@ function computeEllipsePointsFromState(body, bodies, steps = 300) {
   const p = a * (1 - e * e);
   if (!(p > 0)) return [];
 
-  // Calculate periapsis distance and ensure it clears the sun
   const periapsis = a * (1 - e);
-  const minSafeDistance = sun.radius + body.radius + 1.0; // Reduced safe margin due to better scaling
+  const minSafeDistance = sun.radius + body.radius + 1.0;
   
   if (periapsis < minSafeDistance) {
-    // Adjust the ellipse points to ensure they don't intersect the sun
     const unitE = eVec.clone().normalize();
     const unitH = h.clone().normalize();
     const unitPerp = new THREE.Vector3().crossVectors(unitH, unitE).normalize();
@@ -202,10 +393,7 @@ function computeEllipsePointsFromState(body, bodies, steps = 300) {
     for (let k = 0; k <= steps; k++) {
       const theta = (k / steps) * Math.PI * 2;
       let rTheta = p / (1 + e * Math.cos(theta));
-      
-      // Ensure minimum safe distance from sun
       rTheta = Math.max(rTheta, minSafeDistance);
-      
       const pos = unitE.clone().multiplyScalar(rTheta * Math.cos(theta))
         .add(unitPerp.clone().multiplyScalar(rTheta * Math.sin(theta)));
       const worldPos = pos.add(sun.position.clone());
@@ -244,36 +432,29 @@ function CameraTracker({ onDistanceChange }) {
   return null;
 }
 
-/* ---------- Enhanced Planet Component with Dynamic Scaling ---------- */
+/* ---------- Enhanced Planet Component ---------- */
 function PlanetMesh({ body, onClick, showLabel, cameraDistance, onOrbitUpdate }) {
   const ref = useRef();
   const meshRef = useRef();
   
-  // Dynamic scaling based on camera distance
   const scaledRadius = useMemo(() => {
     if (!cameraDistance) return body.radius;
-    
     const baseScale = 1.0;
     const distanceFactor = Math.min(1, cameraDistance / 150);
-    const minVisibleSize = 0.3; // Smaller minimum size for better scale
-    const scale = baseScale + (distanceFactor * 1.2); // Reduced scaling
-    
+    const minVisibleSize = 0.3;
+    const scale = baseScale + (distanceFactor * 1.2);
     const isInnerPlanet = body.baseRadius < 0.8;
     const aggressiveScale = isInnerPlanet ? scale * 1.2 : scale;
-    
     return Math.max(body.baseRadius * aggressiveScale, minVisibleSize);
   }, [body.baseRadius, body.radius, cameraDistance]);
 
   useFrame(() => {
     if (!ref.current) return;
     ref.current.position.copy(body.position);
-    
     if (meshRef.current) {
       const scale = scaledRadius / body.baseRadius;
       meshRef.current.scale.setScalar(scale);
     }
-    
-    // Notify parent that planet position updated (for orbit recalculation)
     if (onOrbitUpdate) {
       onOrbitUpdate();
     }
@@ -281,7 +462,6 @@ function PlanetMesh({ body, onClick, showLabel, cameraDistance, onOrbitUpdate })
 
   return (
     <group ref={ref}>
-      {/* Glow effect for better visibility */}
       <mesh>
         <sphereGeometry args={[scaledRadius * 1.1, 16, 16]} />
         <meshBasicMaterial 
@@ -292,7 +472,6 @@ function PlanetMesh({ body, onClick, showLabel, cameraDistance, onOrbitUpdate })
         />
       </mesh>
       
-      {/* Main planet */}
       <mesh 
         ref={meshRef} 
         onClick={(e) => { e.stopPropagation(); onClick(body); }}
@@ -309,7 +488,6 @@ function PlanetMesh({ body, onClick, showLabel, cameraDistance, onOrbitUpdate })
         />
       </mesh>
       
-      {/* Enhanced label with distance-based sizing */}
       {showLabel && (
         <Html 
           distanceFactor={25} 
@@ -329,19 +507,17 @@ function PlanetMesh({ body, onClick, showLabel, cameraDistance, onOrbitUpdate })
   );
 }
 
-/* ---------- Enhanced Ellipse Lines with Dynamic Updates ---------- */
+/* ---------- Enhanced Ellipse Lines ---------- */
 function EllipseLine({ body, bodies, cameraDistance, forceUpdate }) {
   const ref = useRef();
   const [geometry] = useState(() => new THREE.BufferGeometry());
   
-  // Dynamic line width based on camera distance
   const material = useMemo(() => new THREE.LineBasicMaterial({ 
     color: body.glowColor || body.color, 
     opacity: Math.min(0.6, 0.4 + (cameraDistance / 600)),
     transparent: true,
   }), [body.color, body.glowColor, cameraDistance]);
 
-  // Update ellipse geometry when body properties change
   const updateEllipseGeometry = useMemo(() => {
     return () => {
       if (!ref.current) return;
@@ -353,12 +529,10 @@ function EllipseLine({ body, bodies, cameraDistance, forceUpdate }) {
     };
   }, [body, bodies, geometry]);
 
-  // Update on initial mount and when forceUpdate changes
   useEffect(() => {
     updateEllipseGeometry();
   }, [updateEllipseGeometry, forceUpdate]);
 
-  // Update every frame to ensure paths stay current
   useFrame(() => {
     updateEllipseGeometry();
   });
@@ -366,9 +540,10 @@ function EllipseLine({ body, bodies, cameraDistance, forceUpdate }) {
   return <line ref={ref} geometry={geometry} material={material} />;
 }
 
-/* ---------- Physics Runner Component ---------- */
+/* ---------- Physics Runner with Realistic Collisions ---------- */
 function PhysicsRunner({ bodiesRef, running, timeScale, setBodies, collisionEnabled, setLog, onPhysicsUpdate }) {
   const last = useRef(performance.now());
+  const collisionCooldown = useRef(new Map());
   
   useFrame(() => {
     const now = performance.now();
@@ -406,22 +581,25 @@ function PhysicsRunner({ bodiesRef, running, timeScale, setBodies, collisionEnab
       }
       for (let i = 0; i < local.length; i++) local[i].velocity.add(accs[i].clone().multiplyScalar(0.5 * subDt));
 
+      // REALISTIC COLLISION DETECTION AND HANDLING
       if (collisionEnabled) {
+        const currentTime = Date.now();
+        
         for (let i = 0; i < local.length; i++) {
           for (let j = i + 1; j < local.length; j++) {
             const A = local[i], B = local[j];
             if (A.id === "sun" || B.id === "sun") continue;
-            const dist = A.position.distanceTo(B.position);
-            if (dist < (A.radius + B.radius) * 0.9) {
-              const normal = new THREE.Vector3().subVectors(B.position, A.position).normalize();
-              const rel = A.velocity.clone().sub(B.velocity);
-              const along = rel.dot(normal);
-              if (along > 0) continue;
-              const m1 = A.mass, m2 = B.mass;
-              const jimp = (2 * along) / (m1 / m2 + 1);
-              A.velocity.sub(normal.clone().multiplyScalar((jimp * m2) / (m1 + 1e-6)));
-              B.velocity.add(normal.clone().multiplyScalar((jimp * m1) / (m2 + 1e-6)));
-              setLog(L => [`Scattering ${A.name} ↔ ${B.name}`, ...L].slice(0, 8));
+            
+            // Check cooldown to prevent multiple collision triggers
+            const collisionKey = [A.id, B.id].sort().join('_');
+            const lastCollision = collisionCooldown.current.get(collisionKey) || 0;
+            if (currentTime - lastCollision < 1000) continue; // 1 second cooldown
+            
+            // Handle realistic collision
+            const collisionOccurred = handleRealisticCollision(A, B, setLog, local, setBodies);
+            if (collisionOccurred) {
+              collisionCooldown.current.set(collisionKey, currentTime);
+              break; // Break inner loop since bodies array will change
             }
           }
         }
@@ -431,7 +609,6 @@ function PhysicsRunner({ bodiesRef, running, timeScale, setBodies, collisionEnab
     const newBodies = local.map(lb => ({ ...lb, position: lb.position, velocity: lb.velocity }));
     setBodies(newBodies);
     
-    // Notify about physics update for orbit recalculations
     if (onPhysicsUpdate) {
       onPhysicsUpdate();
     }
@@ -440,8 +617,8 @@ function PhysicsRunner({ bodiesRef, running, timeScale, setBodies, collisionEnab
   return null;
 }
 
-/* ---------- Main Enhanced Component ---------- */
-export default function NonOverlappingSolarSystem() {
+/* ---------- Main Component ---------- */
+export default function RealisticCollisionSolarSystem() {
   const [bodies, setBodies] = useState(() => defaultBodies());
   const bodiesRef = useRef(bodies);
   bodiesRef.current = bodies;
@@ -457,12 +634,10 @@ export default function NonOverlappingSolarSystem() {
 
   const selected = bodies.find(b => b.id === selectedId) || null;
 
-  // Force orbit updates when properties change
   const triggerOrbitUpdate = () => {
     setOrbitUpdateTrigger(prev => prev + 1);
   };
 
-  // UI setters with orbit update triggering
   const updateMass = (val) => { 
     if (!selected) return; 
     const m = parseFloat(val); 
@@ -476,25 +651,12 @@ export default function NonOverlappingSolarSystem() {
     setBodies(prev => prev.map(b => b.id === selected.id ? { ...b, radius: r, baseRadius: r } : b)); 
     triggerOrbitUpdate();
   };
-  
-  const updateVelocity = (axis, val) => {
-    if (!selected) return;
-    const v = parseFloat(val);
-    setBodies(prev => prev.map(b => {
-      if (b.id !== selected.id) return b;
-      const nv = b.velocity.clone(); 
-      nv[axis] = v;
-      return { ...b, velocity: nv };
-    }));
-    triggerOrbitUpdate();
-  };
 
   function addPlanet() {
     const id = `p_${Math.random().toString(36).slice(2, 8)}`;
-    // Find a safe orbit position that doesn't overlap
     const outerOrbit = Math.max(...bodies.filter(b => b.id !== 'sun').map(b => b.orbitalElements.a / AU));
-    const a = (outerOrbit + 2 + Math.random() * 3) * AU; // Place beyond existing orbits
-    const e = Math.random() * 0.05; // Very low eccentricity
+    const a = (outerOrbit + 2 + Math.random() * 3) * AU;
+    const e = Math.random() * 0.05;
     const i = (Math.random() - 0.5) * 0.1;
     const omega = Math.random() * Math.PI * 2;
     const Omega = Math.random() * Math.PI * 2;
@@ -539,7 +701,6 @@ export default function NonOverlappingSolarSystem() {
           shadows
         >
           <color attach="background" args={[bgColor]} />
-          {/* Fog removed for clearer zooming out */}
           
           <ambientLight intensity={0.5} />
           <directionalLight 
@@ -555,7 +716,6 @@ export default function NonOverlappingSolarSystem() {
             color="#ffaa33"
           />
 
-          {/* Enhanced orbital paths with force update trigger */}
           {showEllipses && bodies.map(b => b.id !== "sun" ? 
             <EllipseLine 
               key={`ell_${b.id}`} 
@@ -566,7 +726,6 @@ export default function NonOverlappingSolarSystem() {
             /> 
           : null)}
 
-          {/* Enhanced planets with dynamic scaling and orbit updates */}
           {bodies.map(b => (
             <PlanetMesh 
               key={b.id} 
@@ -599,16 +758,15 @@ export default function NonOverlappingSolarSystem() {
           <CameraTracker onDistanceChange={setCameraDistance} />
         </Canvas>
         
-        {/* Camera distance indicator */}
         <div className="absolute bottom-4 left-4 bg-black bg-opacity-50 text-white px-3 py-2 rounded text-sm">
           Zoom: {Math.round(cameraDistance)} units
         </div>
       </div>
 
       <div className="w-1/4 h-full bg-gray-900 text-white p-4 overflow-auto border-l border-gray-700">
-        <h2 className="text-xl font-bold mb-3 text-yellow-200">Non-Overlapping Solar System</h2>
+        <h2 className="text-xl font-bold mb-3 text-yellow-200">Realistic Collision Solar System</h2>
         <div className="mb-3 text-sm text-gray-300 bg-gray-800 p-2 rounded">
-          Completely revised scaling ensures no orbital paths overlap. All planets have clear separation.
+          Collisions now create moons, merge planets, or cause catastrophic disruptions based on real astrophysics!
         </div>
 
         <div className="mb-4 flex flex-wrap gap-2">
@@ -657,7 +815,7 @@ export default function NonOverlappingSolarSystem() {
           </div>
 
           <div className="flex items-center justify-between p-2 bg-gray-800 rounded">
-            <label className="text-sm font-medium">Enable Collisions</label>
+            <label className="text-sm font-medium">Enable Realistic Collisions</label>
             <input 
               type="checkbox" 
               checked={collisionEnabled} 
@@ -674,7 +832,6 @@ export default function NonOverlappingSolarSystem() {
               <div>
                 <label className="block text-xs text-gray-400 mb-1">
                   Mass: <span className="text-white font-medium">{selected.mass.toFixed(3)}</span>
-                  <br /><span className="text-xs text-gray-500">(Affects orbital path)</span>
                 </label>
                 <input 
                   type="range" 
@@ -689,7 +846,6 @@ export default function NonOverlappingSolarSystem() {
               <div>
                 <label className="block text-xs text-gray-400 mb-1">
                   Radius: <span className="text-white font-medium">{selected.radius.toFixed(2)}</span>
-                  <br /><span className="text-xs text-gray-500">(Affects safe orbital distance)</span>
                 </label>
                 <input 
                   type="range" 
@@ -740,6 +896,19 @@ export default function NonOverlappingSolarSystem() {
             ))}
           </div>
         </div>
+
+        {log.length > 0 && (
+          <div className="mt-6">
+            <h3 className="font-bold mb-2 text-yellow-200">Collision Events</h3>
+            <div className="text-xs max-h-32 overflow-y-auto space-y-1 bg-gray-800 p-2 rounded">
+              {log.map((entry, i) => (
+                <div key={i} className="p-2 border-b border-gray-700 last:border-0 font-mono">
+                  {entry}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
