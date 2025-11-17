@@ -4,12 +4,12 @@ import { OrbitControls, Html } from "@react-three/drei";
 import * as THREE from "three";
 
 /*
-  Solar system with original spacing but increased distances from sun
+  Solar system with completely revised scaling to prevent orbit overlaps
 */
 const v3 = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
 
 const G = 0.12;
-const AU = 15; // Restored original AU value
+const AU = 10; // Reduced AU for better visual spacing
 const SUN_MASS = 10000;
 
 // Convert orbital elements -> Cartesian
@@ -49,14 +49,14 @@ function orbitalElementsToState(a, e, i, omega, Omega, nu, mu) {
   return { position: pos, velocity: vel };
 }
 
-// Original planet spacing with increased distances from sun
+// Completely revised scaling with non-overlapping orbits
 function defaultBodies() {
   const sun = {
     id: "sun",
     name: "Sun",
     mass: SUN_MASS,
-    radius: 4.0, // Restored original sun size
-    baseRadius: 4.0,
+    radius: 2.5, // Smaller sun for better scale
+    baseRadius: 2.5,
     color: "#ffaa33",
     glowColor: "#ff6600",
     position: v3(0, 0, 0),
@@ -66,48 +66,56 @@ function defaultBodies() {
     importance: 10,
   };
 
-  // Original planet spacing but with increased distances from sun
+  // Completely revised orbital distances with clear spacing
   const defs = [
     // [name, massRel, radiusRel, aAU, e, incDeg, color, glowColor, initialNu]
-    ["Mercury", 0.055, 0.6, 0.7, 0.205, 7.0, "#b8a17a", "#d4c4a8", Math.PI * 0.7],    // Increased from 0.45 to 0.6 AU
-    ["Venus", 0.815, 1.1, 1.15, 0.007, 3.39, "#e6d5b8", "#f5e9d5", Math.PI * 0.3],    // Increased from 0.75 to 0.85 AU
-    ["Earth", 1.0, 1.2, 1.3, 0.017, 0.0, "#6bb5ff", "#a3d1ff", Math.PI * 0.5],        // Increased from 1.0 to 1.1 AU
-    ["Mars", 0.107, 0.8, 2.0, 0.094, 1.85, "#ff8c69", "#ffb5a3", Math.PI * 0.8],      // Slight increase from 1.6 to 1.7 AU
-    ["Jupiter", 317.8, 2.8, 5.5, 0.049, 1.305, "#e0b580", "#f0d9b5", Math.PI * 0.2],  // Original 5.5 AU
-    ["Saturn", 95.2, 2.1, 9.8, 0.056, 2.485, "#f0d9a4", "#f8ecca", Math.PI * 0.6],    // Original 9.8 AU
-    ["Uranus", 14.5, 1.6, 16.5, 0.047, 0.773, "#c6f7ff", "#e3fbff", Math.PI * 0.4],   // Original 19.5 AU
-    ["Neptune", 17.15, 1.6, 24.5, 0.009, 1.77, "#6b9fff", "#a3c2ff", Math.PI * 0.9],  // Original 30.5 AU
+    ["Mercury", 0.055, 0.4, 1.0, 0.1, 7.0, "#b8a17a", "#d4c4a8", Math.PI * 0.7],     // Reduced eccentricity
+    ["Venus", 0.815, 0.9, 1.8, 0.01, 3.39, "#e6d5b8", "#f5e9d5", Math.PI * 0.3],    // Very low eccentricity
+    ["Earth", 1.0, 1.0, 2.6, 0.02, 0.0, "#6bb5ff", "#a3d1ff", Math.PI * 0.5],        // Low eccentricity
+    ["Mars", 0.107, 0.6, 3.4, 0.05, 1.85, "#ff8c69", "#ffb5a3", Math.PI * 0.8],      // Moderate spacing
+    ["Jupiter", 317.8, 1.8, 5.0, 0.03, 1.305, "#e0b580", "#f0d9b5", Math.PI * 0.2],  // Significant gap
+    ["Saturn", 95.2, 1.6, 6.8, 0.04, 2.485, "#f0d9a4", "#f8ecca", Math.PI * 0.6],    // Clear separation
+    ["Uranus", 14.5, 1.2, 8.6, 0.02, 0.773, "#c6f7ff", "#e3fbff", Math.PI * 0.4],    // Wide gap
+    ["Neptune", 17.15, 1.2, 10.4, 0.01, 1.77, "#6b9fff", "#a3c2ff", Math.PI * 0.9],  // Final clear spacing
   ];
 
   const bodies = [sun];
+  
+  // Calculate minimum safe distances between orbits
+  const orbitSpacing = 1.2; // Minimum spacing multiplier between orbits
+  
   for (let idx = 0; idx < defs.length; idx++) {
     const [name, massRel, radiusRel, aAU, e, incDeg, color, glowColor, initialNu] = defs[idx];
-    const a = aAU * AU;
+    
+    // Ensure minimum distance from previous orbit
+    let a = aAU * AU;
+    if (idx > 0) {
+      const prevBody = bodies[idx]; // Previous planet (index matches since sun is first)
+      const prevA = prevBody.orbitalElements.a / AU; // Get previous semi-major axis in AU
+      const minDistance = (prevA * (1 + prevBody.orbitalElements.e) + 0.3) * orbitSpacing;
+      a = Math.max(a, minDistance * AU);
+    }
+    
     const i = (incDeg * Math.PI) / 180;
-    const omega = (Math.random() - 0.5) * 0.4;
-    const Omega = (Math.random() - 0.5) * 0.4;
+    const omega = (Math.random() - 0.5) * 0.3; // Reduced variation
+    const Omega = (Math.random() - 0.5) * 0.3; // Reduced variation
     const nu = initialNu || Math.random() * Math.PI * 2;
     const mass = massRel;
     const mu = G * (SUN_MASS + mass);
     const { position: posOrb, velocity: velOrb } = orbitalElementsToState(a, e, i, omega, Omega, nu, mu);
-    const kepler = { a, e, i, omega, Omega, nu0: nu };
-    
-    // Calculate periapsis distance to ensure it doesn't intersect the sun
-    const periapsis = a * (1 - e);
-    const sunRadius = sun.radius;
     
     bodies.push({
       id: name.toLowerCase(),
       name,
       mass,
-      radius: Math.max(0.4, radiusRel * 0.22), // Restored original size scaling
-      baseRadius: Math.max(0.4, radiusRel * 0.22),
+      radius: Math.max(0.2, radiusRel * 0.15), // Reduced planet sizes for better scale
+      baseRadius: Math.max(0.2, radiusRel * 0.15),
       color,
       glowColor: glowColor || color,
       position: posOrb.clone(),
       velocity: velOrb.clone(),
       delta: v3(0, 0, 0),
-      kepler,
+      kepler: { a, e, i, omega, Omega, nu0: nu },
       fixed: false,
       importance: 8 - idx * 0.5,
       orbitalElements: { a, e, i, omega, Omega, nu },
@@ -146,7 +154,7 @@ function computeAccelerations(bodies) {
   return accs;
 }
 
-/* ---------- Enhanced predictive ellipse generator with mass consideration ---------- */
+/* ---------- Enhanced predictive ellipse generator with overlap prevention ---------- */
 function computeEllipsePointsFromState(body, bodies, steps = 300) {
   const sun = bodies.find((b) => b.id === "sun");
   if (!sun) return [];
@@ -181,7 +189,7 @@ function computeEllipsePointsFromState(body, bodies, steps = 300) {
 
   // Calculate periapsis distance and ensure it clears the sun
   const periapsis = a * (1 - e);
-  const minSafeDistance = sun.radius + body.radius + 2.0; // Safe margin
+  const minSafeDistance = sun.radius + body.radius + 1.0; // Reduced safe margin due to better scaling
   
   if (periapsis < minSafeDistance) {
     // Adjust the ellipse points to ensure they don't intersect the sun
@@ -246,12 +254,12 @@ function PlanetMesh({ body, onClick, showLabel, cameraDistance, onOrbitUpdate })
     if (!cameraDistance) return body.radius;
     
     const baseScale = 1.0;
-    const distanceFactor = Math.min(1, cameraDistance / 200);
-    const minVisibleSize = 0.8;
-    const scale = baseScale + (distanceFactor * 2);
+    const distanceFactor = Math.min(1, cameraDistance / 150);
+    const minVisibleSize = 0.3; // Smaller minimum size for better scale
+    const scale = baseScale + (distanceFactor * 1.2); // Reduced scaling
     
-    const isInnerPlanet = body.baseRadius < 1.0;
-    const aggressiveScale = isInnerPlanet ? scale * 1.5 : scale;
+    const isInnerPlanet = body.baseRadius < 0.8;
+    const aggressiveScale = isInnerPlanet ? scale * 1.2 : scale;
     
     return Math.max(body.baseRadius * aggressiveScale, minVisibleSize);
   }, [body.baseRadius, body.radius, cameraDistance]);
@@ -275,11 +283,11 @@ function PlanetMesh({ body, onClick, showLabel, cameraDistance, onOrbitUpdate })
     <group ref={ref}>
       {/* Glow effect for better visibility */}
       <mesh>
-        <sphereGeometry args={[scaledRadius * 1.2, 16, 16]} />
+        <sphereGeometry args={[scaledRadius * 1.1, 16, 16]} />
         <meshBasicMaterial 
           color={body.glowColor} 
           transparent 
-          opacity={0.3}
+          opacity={0.2}
           blending={THREE.AdditiveBlending}
         />
       </mesh>
@@ -304,15 +312,15 @@ function PlanetMesh({ body, onClick, showLabel, cameraDistance, onOrbitUpdate })
       {/* Enhanced label with distance-based sizing */}
       {showLabel && (
         <Html 
-          distanceFactor={15} 
-          position={[0, scaledRadius + 0.5, 0]} 
+          distanceFactor={25} 
+          position={[0, scaledRadius + 0.2, 0]} 
           center
           style={{
-            transform: `scale(${Math.min(1, 50 / (cameraDistance || 50))})`,
+            transform: `scale(${Math.min(1, 30 / (cameraDistance || 30))})`,
             transition: 'transform 0.1s'
           }}
         >
-          <div className="bg-black bg-opacity-80 text-white text-sm px-3 py-1 rounded-lg border border-gray-500 font-semibold shadow-lg">
+          <div className="bg-black bg-opacity-80 text-white text-xs px-2 py-1 rounded-lg border border-gray-500 font-semibold shadow-lg">
             {body.name}
           </div>
         </Html>
@@ -329,7 +337,7 @@ function EllipseLine({ body, bodies, cameraDistance, forceUpdate }) {
   // Dynamic line width based on camera distance
   const material = useMemo(() => new THREE.LineBasicMaterial({ 
     color: body.glowColor || body.color, 
-    opacity: Math.min(0.8, 0.3 + (cameraDistance / 500)),
+    opacity: Math.min(0.6, 0.4 + (cameraDistance / 600)),
     transparent: true,
   }), [body.color, body.glowColor, cameraDistance]);
 
@@ -433,7 +441,7 @@ function PhysicsRunner({ bodiesRef, running, timeScale, setBodies, collisionEnab
 }
 
 /* ---------- Main Enhanced Component ---------- */
-export default function SolarSystem() {
+export default function NonOverlappingSolarSystem() {
   const [bodies, setBodies] = useState(() => defaultBodies());
   const bodiesRef = useRef(bodies);
   bodiesRef.current = bodies;
@@ -483,8 +491,10 @@ export default function SolarSystem() {
 
   function addPlanet() {
     const id = `p_${Math.random().toString(36).slice(2, 8)}`;
-    const a = (4 + Math.random() * 10) * AU;
-    const e = Math.random() * 0.05;
+    // Find a safe orbit position that doesn't overlap
+    const outerOrbit = Math.max(...bodies.filter(b => b.id !== 'sun').map(b => b.orbitalElements.a / AU));
+    const a = (outerOrbit + 2 + Math.random() * 3) * AU; // Place beyond existing orbits
+    const e = Math.random() * 0.05; // Very low eccentricity
     const i = (Math.random() - 0.5) * 0.1;
     const omega = Math.random() * Math.PI * 2;
     const Omega = Math.random() * Math.PI * 2;
@@ -496,8 +506,8 @@ export default function SolarSystem() {
       id,
       name: `Planet${bodies.length}`,
       mass,
-      radius: 0.5 + Math.random() * 0.6,
-      baseRadius: 0.5 + Math.random() * 0.6,
+      radius: 0.3 + Math.random() * 0.4,
+      baseRadius: 0.3 + Math.random() * 0.4,
       color: `hsl(${Math.random() * 360}, 70%, 65%)`,
       glowColor: `hsl(${Math.random() * 360}, 80%, 75%)`,
       position,
@@ -525,7 +535,7 @@ export default function SolarSystem() {
       <div className="w-3/4 h-full bg-black relative">
         <Canvas 
           style={{ background: bgColor }} 
-          camera={{ position: [0, 60, 120], fov: 45 }} // Restored original camera
+          camera={{ position: [0, 40, 80], fov: 45 }}
           shadows
         >
           <color attach="background" args={[bgColor]} />
@@ -533,14 +543,14 @@ export default function SolarSystem() {
           
           <ambientLight intensity={0.5} />
           <directionalLight 
-            position={[50, 80, 50]} // Restored original lighting
+            position={[30, 50, 30]}
             intensity={1.2} 
             castShadow
           />
           <pointLight 
             position={[0, 0, 0]} 
             intensity={2.5} 
-            distance={300} // Restored original distance
+            distance={200}
             decay={1.5} 
             color="#ffaa33"
           />
@@ -571,8 +581,8 @@ export default function SolarSystem() {
           <OrbitControls 
             enablePan 
             enableZoom 
-            minDistance={15} // Restored original values
-            maxDistance={1000}
+            minDistance={10}
+            maxDistance={500}
             target={[0, 0, 0]}
           />
           
@@ -596,9 +606,9 @@ export default function SolarSystem() {
       </div>
 
       <div className="w-1/4 h-full bg-gray-900 text-white p-4 overflow-auto border-l border-gray-700">
-        <h2 className="text-xl font-bold mb-3 text-yellow-200">Solar System Simulator</h2>
+        <h2 className="text-xl font-bold mb-3 text-yellow-200">Non-Overlapping Solar System</h2>
         <div className="mb-3 text-sm text-gray-300 bg-gray-800 p-2 rounded">
-          Original planet spacing with increased inner planet distances for collision avoidance.
+          Completely revised scaling ensures no orbital paths overlap. All planets have clear separation.
         </div>
 
         <div className="mb-4 flex flex-wrap gap-2">
@@ -684,7 +694,7 @@ export default function SolarSystem() {
                 <input 
                   type="range" 
                   min="0.1" 
-                  max="5" 
+                  max="3" 
                   step="0.01" 
                   value={selected.radius} 
                   onChange={(e) => updateRadius(e.target.value)} 
