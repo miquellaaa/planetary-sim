@@ -1,5 +1,5 @@
 import React, { useRef, useState, useMemo, useEffect } from "react";
-import { Canvas, useFrame } from "@react-three/fiber";
+import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { OrbitControls, Html } from "@react-three/drei";
 import * as THREE from "three";
 
@@ -63,11 +63,11 @@ function defaultBodies() {
     velocity: v3(0, 0, 0),
     fixed: false,
     kepler: null,
-    importance: 10, // For visibility scaling
+    importance: 10,
   };
 
   const defs = [
-    ["Mercury", 0.055, 0.6, 0.45, 0.205, 7.0, "#b8a17a", "#d4c4a8"], // Increased base size
+    ["Mercury", 0.055, 0.6, 0.45, 0.205, 7.0, "#b8a17a", "#d4c4a8"],
     ["Venus", 0.815, 1.1, 0.75, 0.007, 3.39, "#e6d5b8", "#f5e9d5"],
     ["Earth", 1.0, 1.2, 1.0, 0.017, 0.0, "#6bb5ff", "#a3d1ff"],
     ["Mars", 0.107, 0.8, 1.6, 0.094, 1.85, "#ff8c69", "#ffb5a3"],
@@ -102,13 +102,17 @@ function defaultBodies() {
       delta: v3(0, 0, 0),
       kepler,
       fixed: false,
-      importance: 8 - idx * 0.5, // Outer planets slightly less important for scaling
+      importance: 8 - idx * 0.5,
     });
   }
 
   // zero net momentum
-  let totalMass = 0; let totalMomentum = v3(0, 0, 0);
-  for (const b of bodies) { totalMass += b.mass; totalMomentum.add(b.velocity.clone().multiplyScalar(b.mass)); }
+  let totalMass = 0; 
+  let totalMomentum = v3(0, 0, 0);
+  for (const b of bodies) { 
+    totalMass += b.mass; 
+    totalMomentum.add(b.velocity.clone().multiplyScalar(b.mass)); 
+  }
   const vCOM = totalMomentum.multiplyScalar(1 / (totalMass || 1e-6));
   for (const b of bodies) { b.velocity.sub(vCOM); }
 
@@ -183,8 +187,19 @@ function computeEllipsePointsFromState(body, bodies, steps = 300) {
   return pts;
 }
 
-/* ---------- Enhanced Planet Component with Dynamic Scaling ---------- */
+/* ---------- Camera Distance Tracker ---------- */
+function CameraTracker({ onDistanceChange }) {
+  const { camera } = useThree();
+  
+  useFrame(() => {
+    const distance = camera.position.length();
+    onDistanceChange(distance);
+  });
+  
+  return null;
+}
 
+/* ---------- Enhanced Planet Component with Dynamic Scaling ---------- */
 function PlanetMesh({ body, onClick, showLabel, cameraDistance }) {
   const ref = useRef();
   const meshRef = useRef();
@@ -195,9 +210,9 @@ function PlanetMesh({ body, onClick, showLabel, cameraDistance }) {
     
     // Scale planets to remain visible when zoomed out
     const baseScale = 1.0;
-    const distanceFactor = Math.min(1, cameraDistance / 200); // Normalize distance
-    const minVisibleSize = 0.8; // Minimum visible size when very far
-    const scale = baseScale + (distanceFactor * 2); // Scale up with distance
+    const distanceFactor = Math.min(1, cameraDistance / 200);
+    const minVisibleSize = 0.8;
+    const scale = baseScale + (distanceFactor * 2);
     
     // Inner planets scale more aggressively
     const isInnerPlanet = body.baseRadius < 1.0;
@@ -212,15 +227,16 @@ function PlanetMesh({ body, onClick, showLabel, cameraDistance }) {
     
     // Apply dynamic scaling
     if (meshRef.current) {
-      meshRef.current.scale.setScalar(scaledRadius / body.baseRadius);
+      const scale = scaledRadius / body.baseRadius;
+      meshRef.current.scale.setScalar(scale);
     }
   });
 
   return (
     <group ref={ref}>
       {/* Glow effect for better visibility */}
-      <mesh scale={[1.2, 1.2, 1.2]}>
-        <sphereGeometry args={[scaledRadius, 16, 16]} />
+      <mesh>
+        <sphereGeometry args={[scaledRadius * 1.2, 16, 16]} />
         <meshBasicMaterial 
           color={body.glowColor} 
           transparent 
@@ -253,7 +269,7 @@ function PlanetMesh({ body, onClick, showLabel, cameraDistance }) {
           position={[0, scaledRadius + 0.5, 0]} 
           center
           style={{
-            transform: `scale(${Math.min(1, 50 / (cameraDistance || 50))})`, // Scale label with distance
+            transform: `scale(${Math.min(1, 50 / (cameraDistance || 50))})`,
             transition: 'transform 0.1s'
           }}
         >
@@ -267,7 +283,6 @@ function PlanetMesh({ body, onClick, showLabel, cameraDistance }) {
 }
 
 /* ---------- Enhanced Ellipse Lines ---------- */
-
 function EllipseLine({ body, bodies, cameraDistance }) {
   const ref = useRef();
   const [geometry] = useState(() => new THREE.BufferGeometry());
@@ -275,7 +290,7 @@ function EllipseLine({ body, bodies, cameraDistance }) {
   // Dynamic line width based on camera distance
   const material = useMemo(() => new THREE.LineBasicMaterial({ 
     color: body.glowColor || body.color, 
-    opacity: Math.min(0.8, 0.3 + (cameraDistance / 500)), // Increase opacity when zoomed out
+    opacity: Math.min(0.8, 0.3 + (cameraDistance / 500)),
     transparent: true,
   }), [body.color, body.glowColor, cameraDistance]);
 
@@ -299,135 +314,114 @@ function EllipseLine({ body, bodies, cameraDistance }) {
   return <line ref={ref} geometry={geometry} material={material} />;
 }
 
-/* ---------- Camera Distance Hook ---------- */
-
-function useCameraDistance() {
-  const [distance, setDistance] = useState(0);
-  const camera = useThree(state => state.camera);
+/* ---------- Physics Runner Component ---------- */
+function PhysicsRunner({ bodiesRef, running, timeScale, setBodies, collisionEnabled, setLog }) {
+  const last = useRef(performance.now());
   
   useFrame(() => {
-    setDistance(camera.position.length());
+    const now = performance.now();
+    let dt = (now - last.current) / 1000;
+    last.current = now;
+    if (!running) { last.current = now; return; }
+    dt = Math.min(dt, 0.05);
+    let step = dt * timeScale;
+    if (step <= 0) return;
+
+    const MAX_SUB = 8;
+    const subSteps = Math.min(MAX_SUB, Math.ceil(step / 0.016));
+    const subDt = step / subSteps;
+
+    const local = bodiesRef.current.map(b => ({
+      ...b,
+      position: b.position.clone(),
+      velocity: b.velocity.clone(),
+    }));
+
+    for (let s = 0; s < subSteps; s++) {
+      const accs = computeAccelerations(local);
+      for (let i = 0; i < local.length; i++) local[i].velocity.add(accs[i].clone().multiplyScalar(0.5 * subDt));
+      for (let i = 0; i < local.length; i++) local[i].position.add(local[i].velocity.clone().multiplyScalar(subDt));
+
+      for (let i = 0; i < local.length; i++) {
+        accs[i].set(0, 0, 0);
+        for (let j = 0; j < local.length; j++) {
+          if (i === j) continue;
+          const r = new THREE.Vector3().subVectors(local[j].position, local[i].position);
+          const dist2 = r.lengthSq() + 1e-6;
+          const invDist3 = 1 / Math.sqrt(dist2 * dist2 * dist2);
+          accs[i].add(r.multiplyScalar(G * local[j].mass * invDist3));
+        }
+      }
+      for (let i = 0; i < local.length; i++) local[i].velocity.add(accs[i].clone().multiplyScalar(0.5 * subDt));
+
+      if (collisionEnabled) {
+        for (let i = 0; i < local.length; i++) {
+          for (let j = i + 1; j < local.length; j++) {
+            const A = local[i], B = local[j];
+            if (A.id === "sun" || B.id === "sun") continue;
+            const dist = A.position.distanceTo(B.position);
+            if (dist < (A.radius + B.radius) * 0.9) {
+              const normal = new THREE.Vector3().subVectors(B.position, A.position).normalize();
+              const rel = A.velocity.clone().sub(B.velocity);
+              const along = rel.dot(normal);
+              if (along > 0) continue;
+              const m1 = A.mass, m2 = B.mass;
+              const jimp = (2 * along) / (m1 / m2 + 1);
+              A.velocity.sub(normal.clone().multiplyScalar((jimp * m2) / (m1 + 1e-6)));
+              B.velocity.add(normal.clone().multiplyScalar((jimp * m1) / (m2 + 1e-6)));
+              setLog(L => [`Scattering ${A.name} ↔ ${B.name}`, ...L].slice(0, 8));
+            }
+          }
+        }
+      }
+    }
+
+    const newBodies = local.map(lb => ({ ...lb, position: lb.position, velocity: lb.velocity }));
+    setBodies(newBodies);
   });
   
-  return distance;
+  return null;
 }
 
 /* ---------- Main Enhanced Component ---------- */
-
 export default function EnhancedSolarSystem() {
   const [bodies, setBodies] = useState(() => defaultBodies());
   const bodiesRef = useRef(bodies);
   bodiesRef.current = bodies;
 
-  const simTimeRef = useRef(0);
   const [running, setRunning] = useState(true);
   const [timeScale, setTimeScale] = useState(0.8);
   const [selectedId, setSelectedId] = useState(null);
   const [showEllipses, setShowEllipses] = useState(true);
-  const [predictionSteps, setPredictionSteps] = useState(300);
   const [collisionEnabled, setCollisionEnabled] = useState(false);
   const [log, setLog] = useState([]);
   const [cameraDistance, setCameraDistance] = useState(0);
 
   const selected = bodies.find(b => b.id === selectedId) || null;
 
-  // Camera distance tracker
-  function CameraTracker() {
-    const camera = useThree(state => state.camera);
-    useFrame(() => {
-      setCameraDistance(camera.position.length());
-    });
-    return null;
-  }
-
-  function PhysicsRunner() {
-    const last = useRef(performance.now());
-    useFrame(() => {
-      const now = performance.now();
-      let dt = (now - last.current) / 1000;
-      last.current = now;
-      if (!running) { last.current = now; return; }
-      dt = Math.min(dt, 0.05);
-      let step = dt * timeScale;
-      if (step <= 0) return;
-
-      const MAX_SUB = 8;
-      const subSteps = Math.min(MAX_SUB, Math.ceil(step / 0.016));
-      const subDt = step / subSteps;
-
-      const local = bodiesRef.current.map(b => ({
-        ...b,
-        position: b.position.clone(),
-        velocity: b.velocity.clone(),
-      }));
-
-      for (let s = 0; s < subSteps; s++) {
-        const accs = computeAccelerations(local);
-        for (let i = 0; i < local.length; i++) local[i].velocity.add(accs[i].clone().multiplyScalar(0.5 * subDt));
-        for (let i = 0; i < local.length; i++) local[i].position.add(local[i].velocity.clone().multiplyScalar(subDt));
-
-        for (let i = 0; i < local.length; i++) {
-          accs[i].set(0, 0, 0);
-          for (let j = 0; j < local.length; j++) {
-            if (i === j) continue;
-            const r = new THREE.Vector3().subVectors(local[j].position, local[i].position);
-            const dist2 = r.lengthSq() + 1e-6;
-            const invDist3 = 1 / Math.sqrt(dist2 * dist2 * dist2);
-            accs[i].add(r.multiplyScalar(G * local[j].mass * invDist3));
-          }
-        }
-        for (let i = 0; i < local.length; i++) local[i].velocity.add(accs[i].clone().multiplyScalar(0.5 * subDt));
-
-        if (collisionEnabled) {
-          for (let i = 0; i < local.length; i++) {
-            for (let j = i + 1; j < local.length; j++) {
-              const A = local[i], B = local[j];
-              if (A.id === "sun" || B.id === "sun") continue;
-              const dist = A.position.distanceTo(B.position);
-              if (dist < (A.radius + B.radius) * 0.9) {
-                const normal = new THREE.Vector3().subVectors(B.position, A.position).normalize();
-                const rel = A.velocity.clone().sub(B.velocity);
-                const along = rel.dot(normal);
-                if (along > 0) continue;
-                const m1 = A.mass, m2 = B.mass;
-                const jimp = (2 * along) / (m1 / m2 + 1);
-                A.velocity.sub(normal.clone().multiplyScalar((jimp * m2) / (m1 + 1e-6)));
-                B.velocity.add(normal.clone().multiplyScalar((jimp * m1) / (m2 + 1e-6)));
-                setLog(L => [`Scattering ${A.name} ↔ ${B.name}`, ...L].slice(0, 8));
-              }
-            }
-          }
-        }
-      }
-
-      const newBodies = local.map(lb => ({ ...lb, position: lb.position, velocity: lb.velocity }));
-      simTimeRef.current += step;
-      setBodies(newBodies);
-    });
-    return null;
-  }
-
   // UI setters
-  const updateMass = (val) => { if (!selected) return; const m = parseFloat(val); setBodies(prev => prev.map(b => b.id === selected.id ? { ...b, mass: m } : b)); };
-  const updateRadius = (val) => { if (!selected) return; const r = parseFloat(val); setBodies(prev => prev.map(b => b.id === selected.id ? { ...b, radius: r, baseRadius: r } : b)); };
+  const updateMass = (val) => { 
+    if (!selected) return; 
+    const m = parseFloat(val); 
+    setBodies(prev => prev.map(b => b.id === selected.id ? { ...b, mass: m } : b)); 
+  };
+  
+  const updateRadius = (val) => { 
+    if (!selected) return; 
+    const r = parseFloat(val); 
+    setBodies(prev => prev.map(b => b.id === selected.id ? { ...b, radius: r, baseRadius: r } : b)); 
+  };
+  
   const updateVelocity = (axis, val) => {
     if (!selected) return;
     const v = parseFloat(val);
     setBodies(prev => prev.map(b => {
       if (b.id !== selected.id) return b;
-      const nv = b.velocity.clone(); nv[axis] = v;
+      const nv = b.velocity.clone(); 
+      nv[axis] = v;
       return { ...b, velocity: nv };
     }));
   };
-
-  useEffect(() => {
-    let broken = false;
-    for (const b of bodies) {
-      if (!b.position || !b.velocity) { broken = true; break; }
-      if (!isFinite(b.position.x) || !isFinite(b.velocity.x)) { broken = true; break; }
-    }
-    if (broken) { setBodies(defaultBodies()); simTimeRef.current = 0; }
-  }, []);
 
   function addPlanet() {
     const id = `p_${Math.random().toString(36).slice(2, 8)}`;
@@ -459,7 +453,6 @@ export default function EnhancedSolarSystem() {
 
   function reset() {
     setBodies(defaultBodies());
-    simTimeRef.current = 0;
     setLog([]);
     setSelectedId(null);
   }
@@ -482,8 +475,6 @@ export default function EnhancedSolarSystem() {
             position={[50, 80, 50]} 
             intensity={1.2} 
             castShadow
-            shadow-mapSize-width={2048}
-            shadow-mapSize-height={2048}
           />
           <pointLight 
             position={[0, 0, 0]} 
@@ -522,8 +513,16 @@ export default function EnhancedSolarSystem() {
             target={[0, 0, 0]}
           />
           
-          <PhysicsRunner />
-          <CameraTracker />
+          <PhysicsRunner 
+            bodiesRef={bodiesRef}
+            running={running}
+            timeScale={timeScale}
+            setBodies={setBodies}
+            collisionEnabled={collisionEnabled}
+            setLog={setLog}
+          />
+          
+          <CameraTracker onDistanceChange={setCameraDistance} />
         </Canvas>
         
         {/* Camera distance indicator */}
@@ -539,13 +538,22 @@ export default function EnhancedSolarSystem() {
         </div>
 
         <div className="mb-4 flex flex-wrap gap-2">
-          <button className="bg-blue-600 hover:bg-blue-500 px-3 py-2 rounded flex-1 min-w-[80px]" onClick={() => setRunning(r => !r)}>
+          <button 
+            className="bg-blue-600 hover:bg-blue-500 px-3 py-2 rounded flex-1 min-w-[80px]" 
+            onClick={() => setRunning(r => !r)}
+          >
             {running ? "⏸️ Pause" : "▶️ Run"}
           </button>
-          <button className="bg-green-600 hover:bg-green-500 px-3 py-2 rounded flex-1 min-w-[80px]" onClick={addPlanet}>
+          <button 
+            className="bg-green-600 hover:bg-green-500 px-3 py-2 rounded flex-1 min-w-[80px]" 
+            onClick={addPlanet}
+          >
             ➕ Add Planet
           </button>
-          <button className="bg-red-600 hover:bg-red-500 px-3 py-2 rounded flex-1 min-w-[80px]" onClick={reset}>
+          <button 
+            className="bg-red-600 hover:bg-red-500 px-3 py-2 rounded flex-1 min-w-[80px]" 
+            onClick={reset}
+          >
             🔄 Reset
           </button>
         </div>
@@ -656,16 +664,20 @@ export default function EnhancedSolarSystem() {
             ))}
           </div>
         </div>
+
+        {log.length > 0 && (
+          <div className="mt-6">
+            <h3 className="font-bold mb-2 text-yellow-200">Event Log</h3>
+            <div className="text-xs max-h-32 overflow-y-auto space-y-1 bg-gray-800 p-2 rounded">
+              {log.map((entry, i) => (
+                <div key={i} className="p-2 border-b border-gray-700 last:border-0 font-mono">
+                  {entry}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
-}
-
-// Hook to access Three.js camera
-function useThree(selector) {
-  const getThree = useRef();
-  if (!getThree.current) {
-    getThree.current = require('@react-three/fiber').useThree;
-  }
-  return getThree.current(selector);
 }
