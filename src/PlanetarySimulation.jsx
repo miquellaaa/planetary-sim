@@ -4,17 +4,15 @@ import { OrbitControls, Html } from "@react-three/drei";
 import * as THREE from "three";
 
 /*
-  Fixed predictive ellipse generator using orbital elements derived
-  from instantaneous state vectors (position & velocity) relative to Sun.
-  Uses your provided constants:
+  Improved predictive ellipse generator with better visual clarity
 */
 const v3 = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
 
-const G = 0.12;     // gravitational constant in scene units (user provided)
-const AU = 12;      // 1 AU = 12 scene units (user provided)
-const SUN_MASS = 10000; // scaled sun mass used earlier
+const G = 0.12;     // gravitational constant in scene units
+const AU = 15;      // Increased from 12 to 15 for more spacing
+const SUN_MASS = 10000;
 
-// Convert orbital elements -> Cartesian (kept for other utilities if needed)
+// Convert orbital elements -> Cartesian
 function orbitalElementsToState(a, e, i, omega, Omega, nu, mu) {
   const r = (a * (1 - e * e)) / (1 + e * Math.cos(nu));
   const xOrb = r * Math.cos(nu);
@@ -51,29 +49,30 @@ function orbitalElementsToState(a, e, i, omega, Omega, nu, mu) {
   return { position: pos, velocity: vel };
 }
 
-// default bodies (same scaled solar-like setup from before)
+// Improved default bodies with better spacing and visibility
 function defaultBodies() {
   const sun = {
     id: "sun",
     name: "Sun",
     mass: SUN_MASS,
-    radius: 3.6,
-    color: "#ffd27f",
+    radius: 4.0, // Slightly larger for better visibility
+    color: "#ffaa33", // More vibrant yellow
     position: v3(0, 0, 0),
     velocity: v3(0, 0, 0),
     fixed: false,
     kepler: null,
   };
 
+  // Adjusted parameters: [name, massRel, radiusRel, aAU, e, incDeg, color]
   const defs = [
-    ["Mercury", 0.055, 0.35, 0.387, 0.205, 7.0, "#c2b280"],
-    ["Venus", 0.815, 0.9, 0.723, 0.007, 3.39, "#d9c38a"],
-    ["Earth", 1.0, 1.0, 1.0, 0.017, 0.0, "#4da6ff"],
-    ["Mars", 0.107, 0.55, 1.524, 0.094, 1.85, "#ff704d"],
-    ["Jupiter", 317.8, 1.9, 5.204, 0.049, 1.305, "#d9a066"],
-    ["Saturn", 95.2, 1.6, 9.582, 0.056, 2.485, "#e3c179"],
-    ["Uranus", 14.5, 1.2, 19.218, 0.047, 0.773, "#aee7ff"],
-    ["Neptune", 17.15, 1.2, 30.11, 0.009, 1.77, "#497fff"],
+    ["Mercury", 0.055, 0.45, 0.45, 0.205, 7.0, "#b8a17a"], // Increased distance from 0.387 to 0.45 AU
+    ["Venus", 0.815, 1.0, 0.75, 0.007, 3.39, "#e6d5b8"], // Increased radius
+    ["Earth", 1.0, 1.1, 1.0, 0.017, 0.0, "#6bb5ff"], // Slightly larger and brighter blue
+    ["Mars", 0.107, 0.65, 1.6, 0.094, 1.85, "#ff8c69"], // Increased radius
+    ["Jupiter", 317.8, 2.2, 5.5, 0.049, 1.305, "#e0b580"], // Larger
+    ["Saturn", 95.2, 1.9, 9.8, 0.056, 2.485, "#f0d9a4"], // Larger
+    ["Uranus", 14.5, 1.4, 19.5, 0.047, 0.773, "#c6f7ff"], // Brighter
+    ["Neptune", 17.15, 1.4, 30.5, 0.009, 1.77, "#6b9fff"], // Brighter
   ];
 
   const bodies = [sun];
@@ -81,8 +80,8 @@ function defaultBodies() {
     const [name, massRel, radiusRel, aAU, e, incDeg, color] = defs[idx];
     const a = aAU * AU;
     const i = (incDeg * Math.PI) / 180;
-    const omega = (Math.random() - 0.5) * 0.6;
-    const Omega = (Math.random() - 0.5) * 0.6;
+    const omega = (Math.random() - 0.5) * 0.4; // Reduced random variation
+    const Omega = (Math.random() - 0.5) * 0.4; // Reduced random variation
     const nu = Math.random() * Math.PI * 2;
     const mass = massRel;
     const mu = G * (SUN_MASS + mass);
@@ -92,7 +91,7 @@ function defaultBodies() {
       id: name.toLowerCase(),
       name,
       mass,
-      radius: Math.max(0.25, radiusRel * 0.18),
+      radius: Math.max(0.3, radiusRel * 0.2), // Increased base size
       color,
       position: posOrb.clone(),
       velocity: velOrb.clone(),
@@ -130,12 +129,8 @@ function computeAccelerations(bodies) {
   return accs;
 }
 
-/* ---------- FIXED predictive ellipse generator ----------
-   derive instantaneous orbital elements from state vectors relative to Sun,
-   then build the ellipse in the orbital plane using vector basis (unit_e, unit_perp).
-   This avoids mismatches caused by sun wobble / perturbations.
-*/
-function computeEllipsePointsFromState(body, bodies, steps = 240) {
+/* ---------- Improved predictive ellipse generator ---------- */
+function computeEllipsePointsFromState(body, bodies, steps = 300) { // Increased default steps
   // find sun
   const sun = bodies.find((b) => b.id === "sun");
   if (!sun) return [];
@@ -190,12 +185,10 @@ function computeEllipsePointsFromState(body, bodies, steps = 240) {
   // Build ellipse points in world coordinates (focus is at Sun position)
   const pts = [];
   for (let k = 0; k <= steps; k++) {
-    const theta = (k / steps) * Math.PI * 2; // true anomaly parameter
-    const rTheta = p / (1 + e * Math.cos(theta)); // radius for this true anomaly
-    // position in plane: rTheta * (cos θ * unitE + sin θ * unitPerp)
+    const theta = (k / steps) * Math.PI * 2;
+    const rTheta = p / (1 + e * Math.cos(theta));
     const pos = unitE.clone().multiplyScalar(rTheta * Math.cos(theta))
       .add(unitPerp.clone().multiplyScalar(rTheta * Math.sin(theta)));
-    // translate from focus (sun) to world coordinates
     const worldPos = pos.add(sun.position.clone());
     pts.push(worldPos);
   }
@@ -203,66 +196,88 @@ function computeEllipsePointsFromState(body, bodies, steps = 240) {
   return pts;
 }
 
-/* ---------- Rendering components (Planet mesh + Ellipse line) ---------- */
+/* ---------- Improved Rendering components ---------- */
 
 function PlanetMesh({ body, onClick, showLabel }) {
   const ref = useRef();
+  const meshRef = useRef();
+  
   useFrame(() => {
     if (!ref.current) return;
     ref.current.position.copy(body.position);
   });
+
   return (
-    <mesh ref={ref} onClick={(e) => { e.stopPropagation(); onClick(body); }}>
-      <sphereGeometry args={[body.radius, 24, 24]} />
-      <meshStandardMaterial color={body.color} metalness={0.2} roughness={0.7} />
+    <group ref={ref}>
+      <mesh 
+        ref={meshRef} 
+        onClick={(e) => { e.stopPropagation(); onClick(body); }}
+        castShadow
+        receiveShadow
+      >
+        <sphereGeometry args={[body.radius, 32, 32]} /> {/* Higher resolution */}
+        <meshStandardMaterial 
+          color={body.color} 
+          metalness={0.3} 
+          roughness={0.5}
+          emissive={body.id === "sun" ? body.color : "#000000"}
+          emissiveIntensity={body.id === "sun" ? 0.3 : 0}
+        />
+      </mesh>
       {showLabel && (
-        <Html distanceFactor={8} position={[0, body.radius + 0.28, 0]} center>
-          <div className="bg-black bg-opacity-60 text-white text-xs px-2 py-1 rounded">{body.name}</div>
+        <Html distanceFactor={10} position={[0, body.radius + 0.35, 0]} center>
+          <div className="bg-black bg-opacity-70 text-white text-xs px-2 py-1 rounded border border-gray-600 font-medium">
+            {body.name}
+          </div>
         </Html>
       )}
-    </mesh>
+    </group>
   );
 }
 
 function EllipseLine({ body, bodies }) {
   const ref = useRef();
   const [geometry] = useState(() => new THREE.BufferGeometry());
-  const material = useMemo(() => new THREE.LineBasicMaterial({ color: body.color, opacity: 0.45, transparent: true }), [body.color]);
+  const material = useMemo(() => new THREE.LineBasicMaterial({ 
+    color: body.color, 
+    opacity: 0.6, // Increased opacity
+    transparent: true,
+    linewidth: 1
+  }), [body.color]);
 
   useEffect(() => {
-    if (!body) return;
-    const pts = computeEllipsePointsFromState(body, bodies, 240);
-    if (pts.length < 2) return;
-    const positions = new Float32Array(pts.flatMap(p => [p.x, p.y, p.z]));
-    geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
-  }, [body, bodies, body.color, geometry]);
+    updateEllipseGeometry();
+  }, [body, bodies, geometry]);
 
-  // update frequently in case of perturbations
   useFrame(() => {
+    updateEllipseGeometry();
+  });
+
+  const updateEllipseGeometry = () => {
     if (!ref.current) return;
-    const pts = computeEllipsePointsFromState(body, bodies, 240);
+    const pts = computeEllipsePointsFromState(body, bodies, 300);
     if (pts.length < 2) return;
     const positions = new Float32Array(pts.flatMap(p => [p.x, p.y, p.z]));
     geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
     geometry.attributes.position.needsUpdate = true;
-  });
+  };
 
   return <line ref={ref} geometry={geometry} material={material} />;
 }
 
-/* ---------- Main component (scaled N-body from earlier) ---------- */
+/* ---------- Main component ---------- */
 
-export default function HybridNBodySolarScaledFixedPaths() {
+export default function ImprovedSolarSystem() {
   const [bodies, setBodies] = useState(() => defaultBodies());
   const bodiesRef = useRef(bodies);
   bodiesRef.current = bodies;
 
   const simTimeRef = useRef(0);
   const [running, setRunning] = useState(true);
-  const [timeScale, setTimeScale] = useState(1.0);
+  const [timeScale, setTimeScale] = useState(0.8); // Slightly slower default
   const [selectedId, setSelectedId] = useState(null);
   const [showEllipses, setShowEllipses] = useState(true);
-  const [predictionSteps, setPredictionSteps] = useState(200);
+  const [predictionSteps, setPredictionSteps] = useState(300); // Increased default
   const [collisionEnabled, setCollisionEnabled] = useState(false);
   const [log, setLog] = useState([]);
 
@@ -279,8 +294,8 @@ export default function HybridNBodySolarScaledFixedPaths() {
       let step = dt * timeScale;
       if (step <= 0) return;
 
-      const MAX_SUB = 6;
-      const subSteps = Math.min(MAX_SUB, Math.ceil(step / 0.02));
+      const MAX_SUB = 8; // Increased sub-steps for better accuracy
+      const subSteps = Math.min(MAX_SUB, Math.ceil(step / 0.016));
       const subDt = step / subSteps;
 
       const local = bodiesRef.current.map(b => ({
@@ -360,21 +375,21 @@ export default function HybridNBodySolarScaledFixedPaths() {
 
   function addPlanet() {
     const id = `p_${Math.random().toString(36).slice(2, 8)}`;
-    const a = (3 + Math.random() * 8) * AU;
-    const e = Math.random() * 0.08;
-    const i = (Math.random() - 0.5) * 0.2;
+    const a = (4 + Math.random() * 10) * AU; // Further out default
+    const e = Math.random() * 0.05; // Less eccentric
+    const i = (Math.random() - 0.5) * 0.1; // Less inclined
     const omega = Math.random() * Math.PI * 2;
     const Omega = Math.random() * Math.PI * 2;
     const nu = Math.random() * Math.PI * 2;
-    const mass = 1 + Math.random() * 5;
+    const mass = 1 + Math.random() * 3; // Smaller default mass
     const mu = G * (SUN_MASS + mass);
     const { position, velocity } = orbitalElementsToState(a, e, i, omega, Omega, nu, mu);
     const p = {
       id,
-      name: `P${bodies.length}`,
+      name: `Planet${bodies.length}`,
       mass,
-      radius: 0.35 + Math.random() * 0.4,
-      color: `#${Math.floor(Math.random() * 0xffffff).toString(16).padStart(6, "0")}`,
+      radius: 0.4 + Math.random() * 0.5,
+      color: `hsl(${Math.random() * 360}, 70%, 65%)`, // More harmonious random colors
       position,
       velocity,
       kepler: { a, e, i, omega, Omega, nu0: nu },
@@ -390,113 +405,228 @@ export default function HybridNBodySolarScaledFixedPaths() {
     setSelectedId(null);
   }
 
-  const bgColor = "#000000";
+  const bgColor = "#000011"; // Dark blue instead of pure black
 
   return (
     <div className="w-full h-screen flex">
       <div className="w-3/4 h-full bg-black relative">
-        <Canvas style={{ background: bgColor }} camera={{ position: [0, 80, 140], fov: 50 }}>
-          <ambientLight intensity={0.45} />
-          <directionalLight position={[50, 80, 50]} intensity={1.0} />
-          <pointLight position={[0, 0, 0]} intensity={1.8} distance={200} decay={1} />
+        <Canvas 
+          style={{ background: bgColor }} 
+          camera={{ position: [0, 60, 120], fov: 45 }} // Better initial camera
+          shadows
+        >
+          <color attach="background" args={[bgColor]} />
+          <fog attach="fog" args={[bgColor, 80, 200]} /> {/* Depth cue */}
+          
+          <ambientLight intensity={0.4} />
+          <directionalLight 
+            position={[50, 80, 50]} 
+            intensity={1.2} 
+            castShadow
+            shadow-mapSize-width={2048}
+            shadow-mapSize-height={2048}
+          />
+          <pointLight 
+            position={[0, 0, 0]} 
+            intensity={2.0} 
+            distance={250} 
+            decay={1.5} 
+            color="#ffaa33"
+          />
 
-          {showEllipses && bodies.map(b => b.id !== "sun" ? <EllipseLine key={`ell_${b.id}`} body={b} bodies={bodies} /> : null)}
+          {showEllipses && bodies.map(b => b.id !== "sun" ? 
+            <EllipseLine key={`ell_${b.id}`} body={b} bodies={bodies} /> 
+          : null)}
 
-          {bodies.map(b => <PlanetMesh key={b.id} body={b} onClick={() => setSelectedId(b.id)} showLabel={true} />)}
+          {bodies.map(b => (
+            <PlanetMesh 
+              key={b.id} 
+              body={b} 
+              onClick={() => setSelectedId(b.id)} 
+              showLabel={true} 
+            />
+          ))}
 
-          <OrbitControls enablePan enableZoom />
+          <OrbitControls 
+            enablePan 
+            enableZoom 
+            minDistance={20}
+            maxDistance={400}
+            target={[0, 0, 0]}
+          />
           <PhysicsRunner />
         </Canvas>
       </div>
 
-      <div className="w-1/4 h-full bg-gray-900 text-white p-4 overflow-auto">
-        <h2 className="text-xl font-semibold mb-2">Scaled N-body Solar (Fixed Predictive Paths)</h2>
-        <div className="mb-2 text-sm text-gray-300">Predictive ellipses are derived from instantaneous state vectors (r, v) relative to the Sun.</div>
-
-        <div className="mb-3 flex flex-wrap gap-2">
-          <button className="bg-blue-600 hover:bg-blue-500 px-3 py-1 rounded" onClick={() => setRunning(r => !r)}>{running ? "Pause" : "Run"}</button>
-          <button className="bg-green-600 hover:bg-green-500 px-3 py-1 rounded" onClick={addPlanet}>Add Planet</button>
-          <button className="bg-red-600 hover:bg-red-500 px-3 py-1 rounded" onClick={reset}>Reset</button>
+      <div className="w-1/4 h-full bg-gray-900 text-white p-4 overflow-auto border-l border-gray-700">
+        <h2 className="text-xl font-bold mb-3 text-yellow-200">Solar System Simulator</h2>
+        <div className="mb-3 text-sm text-gray-300 bg-gray-800 p-2 rounded">
+          Predictive ellipses derived from instantaneous orbital elements relative to the Sun.
         </div>
 
-        <div className="mb-3">
-          <label className="block text-xs text-gray-400">Time scale: {timeScale.toFixed(2)}</label>
-          <input type="range" min="0.01" max="50" step="0.01" value={timeScale} onChange={(e) => setTimeScale(parseFloat(e.target.value))} className="w-full" />
+        <div className="mb-4 flex flex-wrap gap-2">
+          <button className="bg-blue-600 hover:bg-blue-500 px-3 py-2 rounded flex-1 min-w-[80px]" onClick={() => setRunning(r => !r)}>
+            {running ? "⏸️ Pause" : "▶️ Run"}
+          </button>
+          <button className="bg-green-600 hover:bg-green-500 px-3 py-2 rounded flex-1 min-w-[80px]" onClick={addPlanet}>
+            ➕ Add Planet
+          </button>
+          <button className="bg-red-600 hover:bg-red-500 px-3 py-2 rounded flex-1 min-w-[80px]" onClick={reset}>
+            🔄 Reset
+          </button>
         </div>
 
-        <div className="mb-3">
-          <label className="block text-xs text-gray-400">Prediction points: {predictionSteps}</label>
-          <input type="range" min="50" max="400" step="10" value={predictionSteps} onChange={(e) => setPredictionSteps(parseInt(e.target.value))} className="w-full" />
-        </div>
-
-        <div className="mb-3">
-          <div className="flex items-center justify-between">
-            <label className="text-sm">Show analytic ellipses</label>
-            <input type="checkbox" checked={showEllipses} onChange={(e) => setShowEllipses(e.target.checked)} className="w-4 h-4" />
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium mb-1">Time Scale: {timeScale.toFixed(2)}</label>
+            <input 
+              type="range" 
+              min="0.01" 
+              max="30" 
+              step="0.01" 
+              value={timeScale} 
+              onChange={(e) => setTimeScale(parseFloat(e.target.value))} 
+              className="w-full accent-blue-500"
+            />
           </div>
-        </div>
 
-        <div className="mb-3">
-          <div className="flex items-center justify-between">
-            <label className="text-sm">Enable collision scattering</label>
-            <input type="checkbox" checked={collisionEnabled} onChange={(e) => setCollisionEnabled(e.target.checked)} className="w-4 h-4" />
+          <div>
+            <label className="block text-sm font-medium mb-1">Orbit Resolution: {predictionSteps} points</label>
+            <input 
+              type="range" 
+              min="80" 
+              max="500" 
+              step="10" 
+              value={predictionSteps} 
+              onChange={(e) => setPredictionSteps(parseInt(e.target.value))} 
+              className="w-full accent-green-500"
+            />
+          </div>
+
+          <div className="flex items-center justify-between p-2 bg-gray-800 rounded">
+            <label className="text-sm font-medium">Show Orbital Paths</label>
+            <input 
+              type="checkbox" 
+              checked={showEllipses} 
+              onChange={(e) => setShowEllipses(e.target.checked)} 
+              className="w-5 h-5 accent-blue-500"
+            />
+          </div>
+
+          <div className="flex items-center justify-between p-2 bg-gray-800 rounded">
+            <label className="text-sm font-medium">Enable Collisions</label>
+            <input 
+              type="checkbox" 
+              checked={collisionEnabled} 
+              onChange={(e) => setCollisionEnabled(e.target.checked)} 
+              className="w-5 h-5 accent-red-500"
+            />
           </div>
         </div>
 
         {selected && (
-          <div className="mb-4 p-3 bg-gray-800 rounded">
-            <h3 className="font-medium mb-2">Editing: {selected.name}</h3>
-            <div className="mb-2">
-              <label className="block text-xs text-gray-400 mb-1">Mass: {selected.mass.toFixed(3)}</label>
-              <input type="range" min="0.01" max="400" step="0.01" value={selected.mass} onChange={(e) => updateMass(e.target.value)} className="w-full" />
-            </div>
-            <div className="mb-2">
-              <label className="block text-xs text-gray-400 mb-1">Radius: {selected.radius.toFixed(2)}</label>
-              <input type="range" min="0.1" max="4" step="0.01" value={selected.radius} onChange={(e) => updateRadius(e.target.value)} className="w-full" />
-            </div>
-            <div className="mb-2">
-              <label className="block text-xs text-gray-400 mb-1">Velocity (world)</label>
-              <div className="space-y-1">
-                <div className="flex items-center">
-                  <span className="text-xs w-8">X:</span>
-                  <input type="range" min="-8" max="8" step="0.01" value={selected.velocity.x.toFixed(2)} onChange={(e) => updateVelocity('x', e.target.value)} className="flex-1" />
-                  <span className="text-xs w-12 ml-2">{selected.velocity.x.toFixed(2)}</span>
-                </div>
-                <div className="flex items-center">
-                  <span className="text-xs w-8">Y:</span>
-                  <input type="range" min="-8" max="8" step="0.01" value={selected.velocity.y.toFixed(2)} onChange={(e) => updateVelocity('y', e.target.value)} className="flex-1" />
-                  <span className="text-xs w-12 ml-2">{selected.velocity.y.toFixed(2)}</span>
-                </div>
-                <div className="flex items-center">
-                  <span className="text-xs w-8">Z:</span>
-                  <input type="range" min="-8" max="8" step="0.01" value={selected.velocity.z.toFixed(2)} onChange={(e) => updateVelocity('z', e.target.value)} className="flex-1" />
-                  <span className="text-xs w-12 ml-2">{selected.velocity.z.toFixed(2)}</span>
+          <div className="mt-6 p-4 bg-gray-800 rounded-lg border border-gray-600">
+            <h3 className="font-bold text-lg mb-3 text-yellow-200">Editing: {selected.name}</h3>
+            
+            <div className="space-y-3">
+              <div>
+                <label className="block text-xs text-gray-400 mb-1">
+                  Mass: <span className="text-white font-medium">{selected.mass.toFixed(3)}</span>
+                </label>
+                <input 
+                  type="range" 
+                  min="0.01" 
+                  max="400" 
+                  step="0.01" 
+                  value={selected.mass} 
+                  onChange={(e) => updateMass(e.target.value)} 
+                  className="w-full accent-purple-500"
+                />
+              </div>
+              
+              <div>
+                <label className="block text-xs text-gray-400 mb-1">
+                  Radius: <span className="text-white font-medium">{selected.radius.toFixed(2)}</span>
+                </label>
+                <input 
+                  type="range" 
+                  min="0.1" 
+                  max="5" 
+                  step="0.01" 
+                  value={selected.radius} 
+                  onChange={(e) => updateRadius(e.target.value)} 
+                  className="w-full accent-orange-500"
+                />
+              </div>
+              
+              <div>
+                <label className="block text-xs text-gray-400 mb-2">Velocity Components</label>
+                <div className="space-y-2">
+                  {['x', 'y', 'z'].map(axis => (
+                    <div key={axis} className="flex items-center space-x-2">
+                      <span className="text-xs w-6 font-medium text-gray-400">{axis.toUpperCase()}:</span>
+                      <input 
+                        type="range" 
+                        min="-10" 
+                        max="10" 
+                        step="0.01" 
+                        value={selected.velocity[axis].toFixed(2)} 
+                        onChange={(e) => updateVelocity(axis, e.target.value)} 
+                        className="flex-1 accent-blue-400"
+                      />
+                      <span className="text-xs w-12 text-right font-mono">
+                        {selected.velocity[axis].toFixed(2)}
+                      </span>
+                    </div>
+                  ))}
                 </div>
               </div>
             </div>
           </div>
         )}
 
-        <div className="mb-3">
-          <h3 className="font-medium">Bodies</h3>
-          <div className="text-sm text-gray-300">
+        <div className="mt-6">
+          <h3 className="font-bold mb-3 text-yellow-200">Celestial Bodies</h3>
+          <div className="space-y-2 max-h-60 overflow-y-auto pr-2">
             {bodies.map(b => (
-              <div key={b.id} className={`p-2 border rounded mt-2 cursor-pointer flex items-center justify-between ${selectedId === b.id ? "border-yellow-400" : "border-gray-700"}`} onClick={() => setSelectedId(b.id)}>
-                <div>
-                  <div className="text-sm">{b.name}</div>
-                  <div className="text-xs text-gray-400">m:{b.mass.toFixed(3)} • r:{b.radius.toFixed(2)}</div>
+              <div 
+                key={b.id} 
+                className={`p-3 rounded cursor-pointer transition-all border ${
+                  selectedId === b.id 
+                    ? "border-yellow-400 bg-yellow-900 bg-opacity-20" 
+                    : "border-gray-700 bg-gray-800 hover:bg-gray-750"
+                }`} 
+                onClick={() => setSelectedId(b.id)}
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-3">
+                    <div 
+                      className="w-4 h-4 rounded-full border border-white border-opacity-30"
+                      style={{ backgroundColor: b.color }}
+                    />
+                    <div>
+                      <div className="font-medium text-sm">{b.name}</div>
+                      <div className="text-xs text-gray-400">
+                        m:{b.mass.toFixed(2)} • r:{b.radius.toFixed(2)}
+                      </div>
+                    </div>
+                  </div>
+                  {b.id === "sun" && <span className="text-xs text-yellow-300">⭐</span>}
                 </div>
-                <div style={{ width: 14, height: 14, background: b.color, borderRadius: 4 }} />
               </div>
             ))}
           </div>
         </div>
 
         {log.length > 0 && (
-          <div className="mt-4">
-            <h3 className="font-medium mb-2">Event Log</h3>
-            <div className="text-xs max-h-32 overflow-y-auto">
-              {log.map((entry, i) => <div key={i} className="p-1 border-b border-gray-700">{entry}</div>)}
+          <div className="mt-6">
+            <h3 className="font-bold mb-2 text-yellow-200">Event Log</h3>
+            <div className="text-xs max-h-32 overflow-y-auto space-y-1 bg-gray-800 p-2 rounded">
+              {log.map((entry, i) => (
+                <div key={i} className="p-2 border-b border-gray-700 last:border-0 font-mono">
+                  {entry}
+                </div>
+              ))}
             </div>
           </div>
         )}
