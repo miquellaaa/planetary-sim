@@ -4,12 +4,12 @@ import { OrbitControls, Html } from "@react-three/drei";
 import * as THREE from "three";
 
 /*
-  Solar system with compressed orbits but maintained relative sizes
+  Solar system with original spacing but increased distances from sun
 */
 const v3 = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
 
 const G = 0.12;
-const AU = 8; // Reduced from 15 to 8 for closer planet spacing
+const AU = 15; // Restored original AU value
 const SUN_MASS = 10000;
 
 // Convert orbital elements -> Cartesian
@@ -49,14 +49,14 @@ function orbitalElementsToState(a, e, i, omega, Omega, nu, mu) {
   return { position: pos, velocity: vel };
 }
 
-// Compressed solar system with closer planet spacing
+// Original planet spacing with increased distances from sun
 function defaultBodies() {
   const sun = {
     id: "sun",
     name: "Sun",
     mass: SUN_MASS,
-    radius: 3.0, // Slightly smaller sun since planets are closer
-    baseRadius: 3.0,
+    radius: 4.0, // Restored original sun size
+    baseRadius: 4.0,
     color: "#ffaa33",
     glowColor: "#ff6600",
     position: v3(0, 0, 0),
@@ -66,17 +66,17 @@ function defaultBodies() {
     importance: 10,
   };
 
-  // Compressed orbits: planets closer together but maintaining relative distances
+  // Original planet spacing but with increased distances from sun
   const defs = [
     // [name, massRel, radiusRel, aAU, e, incDeg, color, glowColor, initialNu]
-    ["Mercury", 0.055, 0.6, 0.8, 0.205, 7.0, "#b8a17a", "#d4c4a8", Math.PI * 0.7],    // Increased from 0.55 to 0.8 AU
-    ["Venus", 0.815, 1.1, 1.1, 0.007, 3.39, "#e6d5b8", "#f5e9d5", Math.PI * 0.3],     // Increased from 0.75 to 1.1 AU
-    ["Earth", 1.0, 1.2, 1.4, 0.017, 0.0, "#6bb5ff", "#a3d1ff", Math.PI * 0.5],        // Increased from 1.0 to 1.4 AU
-    ["Mars", 0.107, 0.8, 1.8, 0.094, 1.85, "#ff8c69", "#ffb5a3", Math.PI * 0.8],      // Increased from 1.6 to 1.8 AU
-    ["Jupiter", 317.8, 2.4, 3.0, 0.049, 1.305, "#e0b580", "#f0d9b5", Math.PI * 0.2],  // Drastically reduced from 5.5 to 3.0 AU
-    ["Saturn", 95.2, 2.1, 4.0, 0.056, 2.485, "#f0d9a4", "#f8ecca", Math.PI * 0.6],    // Reduced from 9.8 to 4.0 AU
-    ["Uranus", 14.5, 1.6, 5.0, 0.047, 0.773, "#c6f7ff", "#e3fbff", Math.PI * 0.4],    // Reduced from 19.5 to 5.0 AU
-    ["Neptune", 17.15, 1.6, 6.0, 0.009, 1.77, "#6b9fff", "#a3c2ff", Math.PI * 0.9],   // Reduced from 30.5 to 6.0 AU
+    ["Mercury", 0.055, 0.6, 0.6, 0.205, 7.0, "#b8a17a", "#d4c4a8", Math.PI * 0.7],    // Increased from 0.45 to 0.6 AU
+    ["Venus", 0.815, 1.1, 0.85, 0.007, 3.39, "#e6d5b8", "#f5e9d5", Math.PI * 0.3],    // Increased from 0.75 to 0.85 AU
+    ["Earth", 1.0, 1.2, 1.1, 0.017, 0.0, "#6bb5ff", "#a3d1ff", Math.PI * 0.5],        // Increased from 1.0 to 1.1 AU
+    ["Mars", 0.107, 0.8, 1.7, 0.094, 1.85, "#ff8c69", "#ffb5a3", Math.PI * 0.8],      // Slight increase from 1.6 to 1.7 AU
+    ["Jupiter", 317.8, 2.4, 5.5, 0.049, 1.305, "#e0b580", "#f0d9b5", Math.PI * 0.2],  // Original 5.5 AU
+    ["Saturn", 95.2, 2.1, 9.8, 0.056, 2.485, "#f0d9a4", "#f8ecca", Math.PI * 0.6],    // Original 9.8 AU
+    ["Uranus", 14.5, 1.6, 19.5, 0.047, 0.773, "#c6f7ff", "#e3fbff", Math.PI * 0.4],   // Original 19.5 AU
+    ["Neptune", 17.15, 1.6, 30.5, 0.009, 1.77, "#6b9fff", "#a3c2ff", Math.PI * 0.9],  // Original 30.5 AU
   ];
 
   const bodies = [sun];
@@ -100,8 +100,8 @@ function defaultBodies() {
       id: name.toLowerCase(),
       name,
       mass,
-      radius: Math.max(0.4, radiusRel * 0.25), // Slightly increased relative sizes
-      baseRadius: Math.max(0.4, radiusRel * 0.25),
+      radius: Math.max(0.4, radiusRel * 0.22), // Restored original size scaling
+      baseRadius: Math.max(0.4, radiusRel * 0.22),
       color,
       glowColor: glowColor || color,
       position: posOrb.clone(),
@@ -181,7 +181,7 @@ function computeEllipsePointsFromState(body, bodies, steps = 300) {
 
   // Calculate periapsis distance and ensure it clears the sun
   const periapsis = a * (1 - e);
-  const minSafeDistance = sun.radius + body.radius + 1.5; // Reduced safe margin since planets are closer
+  const minSafeDistance = sun.radius + body.radius + 2.0; // Safe margin
   
   if (periapsis < minSafeDistance) {
     // Adjust the ellipse points to ensure they don't intersect the sun
@@ -246,12 +246,12 @@ function PlanetMesh({ body, onClick, showLabel, cameraDistance, onOrbitUpdate })
     if (!cameraDistance) return body.radius;
     
     const baseScale = 1.0;
-    const distanceFactor = Math.min(1, cameraDistance / 150); // Adjusted for closer system
-    const minVisibleSize = 0.6; // Smaller minimum size since planets are closer
-    const scale = baseScale + (distanceFactor * 1.5); // Reduced scaling factor
+    const distanceFactor = Math.min(1, cameraDistance / 200);
+    const minVisibleSize = 0.8;
+    const scale = baseScale + (distanceFactor * 2);
     
     const isInnerPlanet = body.baseRadius < 1.0;
-    const aggressiveScale = isInnerPlanet ? scale * 1.3 : scale; // Reduced aggressive scaling
+    const aggressiveScale = isInnerPlanet ? scale * 1.5 : scale;
     
     return Math.max(body.baseRadius * aggressiveScale, minVisibleSize);
   }, [body.baseRadius, body.radius, cameraDistance]);
@@ -275,11 +275,11 @@ function PlanetMesh({ body, onClick, showLabel, cameraDistance, onOrbitUpdate })
     <group ref={ref}>
       {/* Glow effect for better visibility */}
       <mesh>
-        <sphereGeometry args={[scaledRadius * 1.15, 16, 16]} /> {/* Reduced glow size */}
+        <sphereGeometry args={[scaledRadius * 1.2, 16, 16]} />
         <meshBasicMaterial 
           color={body.glowColor} 
           transparent 
-          opacity={0.25} // Reduced opacity
+          opacity={0.3}
           blending={THREE.AdditiveBlending}
         />
       </mesh>
@@ -304,15 +304,15 @@ function PlanetMesh({ body, onClick, showLabel, cameraDistance, onOrbitUpdate })
       {/* Enhanced label with distance-based sizing */}
       {showLabel && (
         <Html 
-          distanceFactor={20} // Increased for better visibility in closer system
-          position={[0, scaledRadius + 0.3, 0]} // Reduced offset
+          distanceFactor={15} 
+          position={[0, scaledRadius + 0.5, 0]} 
           center
           style={{
-            transform: `scale(${Math.min(1, 40 / (cameraDistance || 40))})`, // Adjusted scaling
+            transform: `scale(${Math.min(1, 50 / (cameraDistance || 50))})`,
             transition: 'transform 0.1s'
           }}
         >
-          <div className="bg-black bg-opacity-80 text-white text-xs px-2 py-1 rounded-lg border border-gray-500 font-semibold shadow-lg">
+          <div className="bg-black bg-opacity-80 text-white text-sm px-3 py-1 rounded-lg border border-gray-500 font-semibold shadow-lg">
             {body.name}
           </div>
         </Html>
@@ -329,7 +329,7 @@ function EllipseLine({ body, bodies, cameraDistance, forceUpdate }) {
   // Dynamic line width based on camera distance
   const material = useMemo(() => new THREE.LineBasicMaterial({ 
     color: body.glowColor || body.color, 
-    opacity: Math.min(0.7, 0.4 + (cameraDistance / 400)), // Adjusted for closer system
+    opacity: Math.min(0.8, 0.3 + (cameraDistance / 500)),
     transparent: true,
   }), [body.color, body.glowColor, cameraDistance]);
 
@@ -433,7 +433,7 @@ function PhysicsRunner({ bodiesRef, running, timeScale, setBodies, collisionEnab
 }
 
 /* ---------- Main Enhanced Component ---------- */
-export default function CompressedSolarSystem() {
+export default function SolarSystem() {
   const [bodies, setBodies] = useState(() => defaultBodies());
   const bodiesRef = useRef(bodies);
   bodiesRef.current = bodies;
@@ -483,7 +483,7 @@ export default function CompressedSolarSystem() {
 
   function addPlanet() {
     const id = `p_${Math.random().toString(36).slice(2, 8)}`;
-    const a = (2 + Math.random() * 4) * AU; // Adjusted for compressed system
+    const a = (4 + Math.random() * 10) * AU;
     const e = Math.random() * 0.05;
     const i = (Math.random() - 0.5) * 0.1;
     const omega = Math.random() * Math.PI * 2;
@@ -496,8 +496,8 @@ export default function CompressedSolarSystem() {
       id,
       name: `Planet${bodies.length}`,
       mass,
-      radius: 0.4 + Math.random() * 0.5, // Adjusted for compressed system
-      baseRadius: 0.4 + Math.random() * 0.5,
+      radius: 0.5 + Math.random() * 0.6,
+      baseRadius: 0.5 + Math.random() * 0.6,
       color: `hsl(${Math.random() * 360}, 70%, 65%)`,
       glowColor: `hsl(${Math.random() * 360}, 80%, 75%)`,
       position,
@@ -525,7 +525,7 @@ export default function CompressedSolarSystem() {
       <div className="w-3/4 h-full bg-black relative">
         <Canvas 
           style={{ background: bgColor }} 
-          camera={{ position: [0, 40, 80], fov: 45 }} // Closer initial camera
+          camera={{ position: [0, 60, 120], fov: 45 }} // Restored original camera
           shadows
         >
           <color attach="background" args={[bgColor]} />
@@ -533,14 +533,14 @@ export default function CompressedSolarSystem() {
           
           <ambientLight intensity={0.5} />
           <directionalLight 
-            position={[30, 50, 30]} // Adjusted for compressed system
+            position={[50, 80, 50]} // Restored original lighting
             intensity={1.2} 
             castShadow
           />
           <pointLight 
             position={[0, 0, 0]} 
             intensity={2.5} 
-            distance={200} // Reduced distance
+            distance={300} // Restored original distance
             decay={1.5} 
             color="#ffaa33"
           />
@@ -571,8 +571,8 @@ export default function CompressedSolarSystem() {
           <OrbitControls 
             enablePan 
             enableZoom 
-            minDistance={10} // Reduced minimum distance
-            maxDistance={500} // Reduced maximum distance
+            minDistance={15} // Restored original values
+            maxDistance={1000}
             target={[0, 0, 0]}
           />
           
@@ -596,9 +596,9 @@ export default function CompressedSolarSystem() {
       </div>
 
       <div className="w-1/4 h-full bg-gray-900 text-white p-4 overflow-auto border-l border-gray-700">
-        <h2 className="text-xl font-bold mb-3 text-yellow-200">Compressed Solar System</h2>
+        <h2 className="text-xl font-bold mb-3 text-yellow-200">Solar System Simulator</h2>
         <div className="mb-3 text-sm text-gray-300 bg-gray-800 p-2 rounded">
-          Planets are closer together but maintain relative sizes. Fog removed for clear viewing.
+          Original planet spacing with increased inner planet distances for collision avoidance.
         </div>
 
         <div className="mb-4 flex flex-wrap gap-2">
