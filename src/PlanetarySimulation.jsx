@@ -11,78 +11,108 @@ const v3 = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
 const G = 0.2;
 
 // Generate planets with initial circular orbit around Sun
+const AU = 10;  // scale factor
+
 const defaultBodies = () => {
-
-  // Mass scale factor (makes numbers workable in simulation)
-  const MASS_SCALE = 1e-6;
-
-  const AU = 20; // 1 AU = 20 simulation units
-
   const sun = {
     id: "sun",
     name: "Sun",
-    mass: 1.989e30 * MASS_SCALE,   // scaled
-    radius: 3.5,
-    color: "#ffcc66",
+    mass: 330000,      // relative masses (Earth = 1)
+    radius: 2.5,
+    color: "#ffdd55",
     position: v3(0, 0, 0),
     velocity: v3(0, 0, 0),
     fixed: true,
   };
 
-  // BASIC PLANET DATA (realistic)
   const planets = [
-    // name,  mass(kg),       radius, distance AU, eccentricity, color
-    ["Mercury", 3.30e23, 0.38, 0.39, 0.205, "#c2b280"],
-    ["Venus",   4.87e24, 0.95, 0.72, 0.007, "#d9c38a"],
-    ["Earth",   5.97e24, 1.00, 1.00, 0.017, "#4da6ff"],
-    ["Mars",    6.42e23, 0.53, 1.52, 0.094, "#ff704d"],
-    ["Jupiter", 1.90e27, 11.2, 5.20, 0.049, "#d9a066"],
-    ["Saturn",  5.68e26, 9.4,  9.58, 0.056, "#e3c179"],
-    ["Uranus",  8.68e25, 4.0, 19.2, 0.047, "#aee7ff"],
-    ["Neptune", 1.02e26, 3.9, 30.0, 0.009, "#497fff"]
+    {
+      id: "mercury",
+      name: "Mercury",
+      mass: 0.055,
+      radius: 0.35,
+      color: "#c2b280",
+      distance: 0.39 * AU,
+    },
+    {
+      id: "venus",
+      name: "Venus",
+      mass: 0.815,
+      radius: 0.9,
+      color: "#d4a15a",
+      distance: 0.72 * AU,
+    },
+    {
+      id: "earth",
+      name: "Earth",
+      mass: 1,
+      radius: 1.0,
+      color: "#4da6ff",
+      distance: 1.0 * AU,
+    },
+    {
+      id: "mars",
+      name: "Mars",
+      mass: 0.107,
+      radius: 0.53,
+      color: "#ff704d",
+      distance: 1.52 * AU,
+    },
+    {
+      id: "jupiter",
+      name: "Jupiter",
+      mass: 317.8,
+      radius: 1.8,
+      color: "#ffcc99",
+      distance: 5.2 * AU,
+    },
+    {
+      id: "saturn",
+      name: "Saturn",
+      mass: 95.2,
+      radius: 1.5,
+      color: "#e6cc80",
+      distance: 9.5 * AU,
+    },
+    {
+      id: "uranus",
+      name: "Uranus",
+      mass: 14.5,
+      radius: 1.3,
+      color: "#99ffff",
+      distance: 19 * AU,
+    },
+    {
+      id: "neptune",
+      name: "Neptune",
+      mass: 17.1,
+      radius: 1.3,
+      color: "#6666ff",
+      distance: 30 * AU,
+    },
   ];
 
-  const bodies = [sun];
+  const planetBodies = planets.map((p, i) => {
+    const angle = (i * Math.PI) / 4;
+    const pos = v3(Math.cos(angle) * p.distance, 0, Math.sin(angle) * p.distance);
 
-  planets.forEach(([name, mass, radius, distanceAU, ecc, color]) => {
-    const massSim = mass * MASS_SCALE;
+    // Circular orbital speed v = sqrt(GM/r)
+    const speed = Math.sqrt((G * sun.mass) / p.distance);
+    const vel = v3(-Math.sin(angle) * speed, 0, Math.cos(angle) * speed);
 
-    // Convert AU → scene units
-    const a = distanceAU * AU;  // semi-major axis
-    const e = ecc;
-
-    // Start at perihelion for visible elliptical differences
-    const r = a * (1 - e);
-
-    // Random angle for non-aligned orbits
-    const theta = Math.random() * Math.PI * 2;
-
-    const pos = v3(Math.cos(theta) * r, 0, Math.sin(theta) * r);
-
-    // Orbital velocity (vis-viva equation): v = sqrt(GM (2/r - 1/a))
-    const GM = G * sun.mass;
-    const speed = Math.sqrt(GM * (2 / r - 1 / a));
-
-    // Velocity perpendicular to radius vector
-    const vel = v3(
-      -Math.sin(theta) * speed,
-      0,
-      Math.cos(theta) * speed
-    );
-
-    bodies.push({
-      id: name.toLowerCase(),
-      name,
-      mass: massSim,
-      radius: radius * 0.15, // scale down radii so everything fits visually
-      color,
+    return {
+      id: p.id,
+      name: p.name,
+      mass: p.mass,
+      radius: p.radius,
+      color: p.color,
       position: pos,
       velocity: vel,
       fixed: false,
-    });
+    };
   });
 
-  return bodies;
+  return [sun, ...planetBodies];
 };
 
 // Physics integrator (semi-implicit)
